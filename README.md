@@ -1,3 +1,6 @@
+[![NPM Package](https://badge.fury.io/js/express-router-dynamic.svg)](https://www.npmjs.com/package/express-router-dynamic)
+[![Build Status](https://travis-ci.org/RikaSugisawa/express-router-dynamic.svg)](https://travis-ci.org/RikaSugisawa/express-router-dynamic)
+
 # express-router-dynamic
 A router used for load more routers based on directory structure.
 

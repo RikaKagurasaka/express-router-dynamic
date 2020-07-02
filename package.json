@@ -1,8 +1,8 @@
 {
   "name": "express-router-dynamic",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A router used for load more routers based on directory structure.",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
     "build": "node_modules/.bin/babel src --out-dir src --extensions \".ts\" --source-maps"
   },
