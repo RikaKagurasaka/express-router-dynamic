@@ -96,7 +96,7 @@ class DynamicRouter {
     this.config = config
   }
 
-  findListener(url: string, req?: express.Request): express.Router | RequestHandler | null {
+  findListener(url: string, req?: express.Request, autoIndex = false): express.Router | RequestHandler | null {
     url = url.replace(/\/+$/, '')
 
     for (let realPrefix of this.config.realPrefix) {
@@ -129,7 +129,7 @@ class DynamicRouter {
         if (fileStatus.isFile())
           //如果是文件直接返回
           return sendFileRouter(targetFile)
-        else if (fileStatus.isDirectory()) {
+        else if (fileStatus.isDirectory() && autoIndex) {
           //如果是目录或无后缀的js
           //按autoIndex顺序依次检查目录下的文件
           let router = null
@@ -157,6 +157,7 @@ export function dynamicRouter(userConfig?: Partial<typeof defaultConfig>): Reque
   const manager = new DynamicRouter(config)
   return (req, res, next) => {
     let listener
+    let autoIndex = true
     let currentFindUrl = req.url || '/'
     // 对于获得的形如/aaa/bbb/ccc形式的url，应当依次查找/aaa/bbb/ccc、/aaa/bbb、/aaa、/ 四种listener，
     // 并在调用listener之前从req.url中删除已经匹配到的部分。
@@ -164,9 +165,10 @@ export function dynamicRouter(userConfig?: Partial<typeof defaultConfig>): Reque
     // 这是为了保证如果bbb.js中有router.get("/ccc", ()=>{})这样的语句时能够正确处理。
 
     while (true) {
-      listener = manager.findListener(currentFindUrl, req)
+      listener = manager.findListener(currentFindUrl, req, autoIndex)
       if (listener || currentFindUrl === "/") break // 找到了，或者已经找完根路径了，就立即停止查找
       currentFindUrl = Path.dirname(currentFindUrl) // 否则，在父路径查找
+      autoIndex = false
     }
 
     if (listener) {
