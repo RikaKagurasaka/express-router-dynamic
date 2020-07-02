@@ -5,6 +5,10 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.dynamicRouter = dynamicRouter;
 
+require("core-js/stable");
+
+require("regenerator-runtime/runtime");
+
 var Fs = _interopRequireWildcard(require("fs"));
 
 var _util = require("util");
@@ -60,8 +64,6 @@ var defaultConfig = {
   realPrefix: ["./src/routers"],
   //该目录下的不会作为路由文件，但是会被检测热更新
   libPrefix: ["./src/lib"],
-  //url解析时的根目录
-  urlPrefix: "/",
   //当请求目标为目录时，按照此顺序寻找对应的路由
   autoIndex: ["index", "index.html", "index.js", "README.md", "README.txt"],
   //屏蔽符合以下条件的文件（对路由文件无效），支持文件名通配、正则和自定义函数。参数为本地真实路径
@@ -284,8 +286,6 @@ var DynamicRouter = /*#__PURE__*/function () {
     key: "findListener",
     value: function findListener(url) {
       url = url.replace(/\/+$/, '');
-      var relativePath = Path.relative(this.config.urlPrefix, url || '/');
-      if (relativePath.indexOf("..") == 0) return null; // 说明待查找的路径超出了urlPrefix限定的范围，停止查找。
 
       var _iterator2 = _createForOfIteratorHelper(this.config.realPrefix),
           _step2;
@@ -293,7 +293,7 @@ var DynamicRouter = /*#__PURE__*/function () {
       try {
         for (_iterator2.s(); !(_step2 = _iterator2.n()).done;) {
           var realPrefix = _step2.value;
-          var targetFile = Path.join(realPrefix, relativePath); //如果目标是js文件（有后缀）
+          var targetFile = Path.join(realPrefix, url || '/'); //如果目标是js文件（有后缀）
 
           if (Fs.existsSync(targetFile) && targetFile.endsWith('.js')) {
             var _module;
@@ -401,16 +401,14 @@ function dynamicRouter(userConfig) {
   var manager = new DynamicRouter(config);
   return function (req, res, next) {
     var listener;
-    var currentFindUrl = req.url || '/';
-    var relativePath; // 对于获得的形如/aaa/bbb/ccc形式的url，应当依次查找/aaa/bbb/ccc、/aaa/bbb、/aaa、/ 四种listener，
+    var currentFindUrl = req.url || '/'; // 对于获得的形如/aaa/bbb/ccc形式的url，应当依次查找/aaa/bbb/ccc、/aaa/bbb、/aaa、/ 四种listener，
     // 并在调用listener之前从req.url中删除已经匹配到的部分。
     // 例如，现在存在文件aaa/bbb.js，则应当以req.url="/ccc"来调用bbb.js中定义的Router。
     // 这是为了保证如果bbb.js中有router.get("/ccc", ()=>{})这样的语句时能够正确处理。
-    // 仅当currentFindUrl没有超出了urlPrefix限定的范围时，才继续在currentFindUrl下查找
 
-    while ((relativePath = Path.relative(manager.config.urlPrefix, currentFindUrl)).indexOf("..") != 0) {
+    while (true) {
       listener = manager.findListener(currentFindUrl);
-      if (listener) break; // 找到了，就立即停止查找
+      if (listener || currentFindUrl === "/") break; // 找到了，或者已经找完根路径了，就立即停止查找
 
       currentFindUrl = Path.dirname(currentFindUrl); // 否则，在父路径查找
     }

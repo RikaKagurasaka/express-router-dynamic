@@ -1,5 +1,5 @@
-// import "core-js/stable";
-// import "regenerator-runtime/runtime";
+import "core-js/stable";
+import "regenerator-runtime/runtime";
 import * as Fs from "fs";
 import {promisify} from 'util'
 import * as Path from "path";
