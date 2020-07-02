@@ -96,7 +96,7 @@ class DynamicRouter {
     this.config = config
   }
 
-  findListener(url: string): express.Router | RequestHandler | null {
+  findListener(url: string, req?: express.Request): express.Router | RequestHandler | null {
     url = url.replace(/\/+$/, '')
 
     for (let realPrefix of this.config.realPrefix) {
@@ -109,14 +109,15 @@ class DynamicRouter {
             return null
         let module = ((require('./' + Path.relative(__dirname, targetFile).replace(/\\/g, '/'))))
         module = module?.default || module
-        //如果是路由文件就返回路由
-        if (module && module.__proto__ == express.Router)
+        // 如果是Router类型的对象，就返回路由
+        // 这里注意判断router所用的express原型应与app的保持一致（否则可能由于express版本不同导致出问题）
+        if (module && module.__proto__ == req.app._router.__proto__)
           return module as express.Router
         //否则继续处理
       }
       //如果存在对应js文件
       if (Fs.existsSync(targetFile + '.js'))
-        return this.findListener(url + '.js')
+        return this.findListener(url + '.js', req)
 
       // 如果目标原始路径存在
       if (Fs.existsSync(targetFile)) {
@@ -134,7 +135,7 @@ class DynamicRouter {
           let router = null
           for (const filename of this.config.autoIndex)
             //查找到了就返回
-            if ((router = this.findListener(url + '/' + filename)))
+            if ((router = this.findListener(url + '/' + filename, req)))
               return router
         }
       }
@@ -163,7 +164,7 @@ export function dynamicRouter(userConfig?: Partial<typeof defaultConfig>): Reque
     // 这是为了保证如果bbb.js中有router.get("/ccc", ()=>{})这样的语句时能够正确处理。
 
     while (true) {
-      listener = manager.findListener(currentFindUrl)
+      listener = manager.findListener(currentFindUrl, req)
       if (listener || currentFindUrl === "/") break // 找到了，或者已经找完根路径了，就立即停止查找
       currentFindUrl = Path.dirname(currentFindUrl) // 否则，在父路径查找
     }

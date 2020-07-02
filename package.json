@@ -1,6 +1,6 @@
 {
   "name": "express-router-dynamic",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A router used for load more routers based on directory structure.",
   "main": "src/index.js",
   "scripts": {
@@ -30,5 +30,8 @@
   "repository": {
     "url": "https://github.com/RikaSugisawa/express-router-dynamic",
     "type": "Github"
-  }
+  },
+  "files": [
+    "src/**/*.{ts,js,d.ts,js.map}"
+  ]
 }
