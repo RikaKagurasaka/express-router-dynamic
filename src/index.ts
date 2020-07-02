@@ -85,7 +85,7 @@ function wrapIgnorance(re: string | RegExp | ((s: string) => boolean)): ((s: str
 
 function sendFileRouter(file: string): RequestHandler {
   return ((req, res) => {
-    res.sendFile(file)
+    res.sendFile(Path.resolve(file))
   })
 }
 
