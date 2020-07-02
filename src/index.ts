@@ -30,20 +30,23 @@ async function watchRecursively(path: string, extraCallback?: FsWatchCallback) {
 
   const callback: FsWatchCallback = async (event, filename) => {
     extraCallback(event, filename)
-    if (event == "rename"
-        && !(Fs.existsSync(filename))) {
+    let stat
+    try {
+      stat = await promisify(Fs.stat)(filename)
+    } catch (e) {}
+
+    if (event == "rename" && !stat) {
       watchers[filename]?.close()
       delete watchers[filename]
     }
-    else if (event == "rename"
-      && (Fs.existsSync(filename))
-      && (await promisify(Fs.stat)(filename)).isDirectory()) {
+    else if (event == "rename" && stat && stat.isDirectory()) {
       watch(filename)
     }
   }
 
   function watch(dirname: string = path) {
     (async () => {
+      watchers[dirname]?.close()
       watchers[dirname] = Fs.watch(dirname,
         (event, filename) =>
           callback(event as any, Path.join(dirname, filename))
