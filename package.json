@@ -4,7 +4,7 @@
   "description": "A router used for load more routers based on directory structure.",
   "main": "index.js",
   "scripts": {
-    "serve": "node ./src/app.js"
+    "build": "node_modules/.bin/babel src --out-dir src --extensions \".ts\" --source-maps"
   },
   "dependencies": {
     "express": "^4.17.1",
