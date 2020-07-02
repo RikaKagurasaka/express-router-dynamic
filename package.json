@@ -1,0 +1,29 @@
+{
+  "name": "express-router-dynamic",
+  "version": "1.0.0",
+  "description": "A router used for load more routers based on directory structure.",
+  "main": "index.js",
+  "scripts": {
+    "serve": "node ./src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1",
+  },
+  "devDependencies": {
+    "core-js": "^3.6.5",
+    "regenerator-runtime": "^0.13.5",
+    "@babel/cli": "^7.8.4",
+    "@babel/core": "^7.8.4",
+    "@babel/plugin-proposal-class-properties": "^7.8.3",
+    "@babel/plugin-proposal-decorators": "^7.8.3",
+    "@babel/preset-env": "^7.8.4",
+    "@babel/preset-typescript": "^7.8.3",
+    "@types/express": "^4.17.2",
+    "@types/express-session": "^1.15.16",
+    "@types/lodash": "^4.14.157",
+    "typescript": "^3.9.5"
+  },
+  "keywords": [],
+  "author": "Rika",
+  "license": "ISC"
+}

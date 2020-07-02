@@ -1,0 +1,14 @@
+{
+
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "esnext",
+    "sourceMap": true,
+    "strict": false,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true
+  },
+  "exclude": [
+    "node_modules"
+  ]
+}
