@@ -109,9 +109,9 @@ class DynamicRouter {
             return null
         let module = ((require('./' + Path.relative(__dirname, targetFile).replace(/\\/g, '/'))))
         module = module?.default || module
-        // 如果是Router类型的对象，就返回路由
+        // 如果是函数类型的对象，就返回路由
         // 这里注意判断router所用的express原型应与app的保持一致（否则可能由于express版本不同导致出问题）
-        if (module && module.__proto__ == req.app._router.__proto__)
+        if (module && typeof module == "function")
           return module as express.Router
         //否则继续处理
       }
