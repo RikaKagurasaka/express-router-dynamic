@@ -43,6 +43,12 @@ app.use(dynamicRouter(config))
 ## Behaviour
 - TODO
 
+## Remind
+- On some platforms (e.g. Windows), executing `npm install` under a watched directory (i.e. directory that are set 
+in `realPrefix` or `libPrefix`) may fail. If your router contain a `package.json`, please install its dependency
+in the application's root directory, by executing something similar to `cd appRooot && npm install ./routers/xxx`, 
+in which `./routes/xxx` is the directory contains your router and its `package.json` file.
+
 ## Acknowledgement
 - [Starrah](https://github.com/Starrah/) for co-work
 

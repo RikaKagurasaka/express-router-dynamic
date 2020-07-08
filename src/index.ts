@@ -48,9 +48,13 @@ async function watchRecursively(path: string, extraCallback?: FsWatchCallback) {
     (async () => {
       watchers[dirname]?.close()
       watchers[dirname] = Fs.watch(dirname,
-        (event, filename) =>
-          callback(event as any, Path.join(dirname, filename))
-      )
+        (event, filename) => {
+          try {
+            callback(event as any, Path.join(dirname, filename))
+          } catch (e) {
+            console.warn(e.message)
+          }
+        })
         .addListener('error', (err: any) => {
             console.warn(err.message, dirname)
           }
@@ -158,7 +162,8 @@ export function dynamicRouter(userConfig?: Partial<typeof defaultConfig>): Reque
   return (req, res, next) => {
     let listener
     let autoIndex = true
-    let currentFindUrl = req.url || '/'
+    let questionMarkIndex = req.url.indexOf("?")
+    let currentFindUrl = (questionMarkIndex === -1? req.url: req.url.substring(0, questionMarkIndex)) || '/'
     // 对于获得的形如/aaa/bbb/ccc形式的url，应当依次查找/aaa/bbb/ccc、/aaa/bbb、/aaa、/ 四种listener，
     // 并在调用listener之前从req.url中删除已经匹配到的部分。
     // 例如，现在存在文件aaa/bbb.js，则应当以req.url="/ccc"来调用bbb.js中定义的Router。
