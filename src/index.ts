@@ -177,7 +177,7 @@ export function dynamicRouter(userConfig?: Partial<typeof defaultConfig>): Reque
     }
 
     if (listener) {
-      req.url = '/' + Path.relative(currentFindUrl, req.url || '/')
+      req.url = '/' + Path.relative(currentFindUrl, req.url || '/').replace(/\\/g, "/")
       listener(req, res, next)
     }
     else
