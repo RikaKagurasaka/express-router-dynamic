@@ -2,7 +2,7 @@
 
   "compilerOptions": {
     "module": "commonjs",
-    "target": "esnext",
+    "target": "es2019",
     "sourceMap": true,
     "strict": false,
     "allowSyntheticDefaultImports": true,

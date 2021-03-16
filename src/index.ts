@@ -8,17 +8,18 @@ import {RequestHandler} from "express";
 
 const defaultConfig = {
   //本地路由根目录，相对于package.json，会按照顺序搜索
-  realPrefix: ["./src/routers"],
+  realPrefix: [],
   //该目录下的不会作为路由文件，但是会被检测热更新
-  libPrefix: ["./src/lib"],
+  libPrefix: [],
   //当请求目标为目录时，按照此顺序寻找对应的路由
-  autoIndex: ["index", "index.html", "index.js", "README.md", "README.txt"],
+  autoIndex: ["index", "index.html", "index.js"],
   //屏蔽符合以下条件的文件（对路由文件无效），支持文件名通配、正则和自定义函数。参数为本地真实路径
   ignore: [
     '*.ts',
-    /\.map$/,
-    s => s.endsWith('.json'),
-    '/config.*'
+    '*.lib.js',
+    '*.json',
+    s => s.endsWith('.map'),
+    /\/config\..+$/
   ],
 }
 
@@ -148,8 +149,10 @@ class DynamicRouter {
   }
 }
 
-export function dynamicRouter(userConfig?: Partial<typeof defaultConfig>): RequestHandler {
+export function dynamicRouter(userConfig: Partial<typeof defaultConfig>): RequestHandler {
   const config = Object.fromEntries(Object.entries(defaultConfig).map(([k, v]) => [k, userConfig?.[k] || v])) as typeof defaultConfig
+  if (typeof config.realPrefix === "string") config.realPrefix = [config.realPrefix]
+  if (typeof config.libPrefix === "string") config.libPrefix = [config.libPrefix]
   config.ignore = config.ignore.map(value => wrapIgnorance(value))
 
   for (let path of [...config.realPrefix, ...config.libPrefix]) {
