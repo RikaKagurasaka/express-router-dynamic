@@ -1,6 +1,6 @@
 {
   "name": "express-router-dynamic",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "A router used for load more routers based on directory structure.",
   "main": "src/index.js",
   "scripts": {
