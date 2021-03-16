@@ -110,13 +110,15 @@ class DynamicRouter {
         for (let ignoreElement of this.config.ignore)
           if ((ignoreElement as Function)(targetFile))
             return null
-        let module = ((require('./' + Path.relative(__dirname, targetFile).replace(/\\/g, '/'))))
+        let filename = Path.resolve('./' + Path.relative(__dirname, targetFile).replace(/\\/g, '/'))
+        let module = require(filename)
         module = module?.default || module
         // 如果是函数类型的对象，就返回路由
         // 这里注意判断router所用的express原型应与app的保持一致（否则可能由于express版本不同导致出问题）
         if (module && typeof module == "function")
+          module.__erd_have_loaded = true // 为所有load进来的路由对象增加一个标志。
           return module as express.Router
-        //否则继续处理
+        //否则继续处理（因为考虑到网站可能会有浏览器直接加载的js文件静态分发的情况）
       }
       //如果存在对应js文件
       if (Fs.existsSync(targetFile + '.js'))
@@ -153,13 +155,25 @@ export function dynamicRouter(userConfig: Partial<typeof defaultConfig>): Reques
   if (typeof config.libPrefix === "string") config.libPrefix = [config.libPrefix]
   config.ignore = config.ignore.map(value => wrapIgnorance(value))
 
+  const manager = new DynamicRouter(config)
   for (let path of [...config.realPrefix, ...config.libPrefix]) {
-    watchRecursively(Path.join(process.cwd(), path), (event, filename) => {
+    watchRecursively(Path.resolve(path), (event, filename) => {
       console.log(event, filename)
+      let cacheObj = require.cache?.[filename]
+      if (cacheObj) {
+        let module = cacheObj.exports?.default || cacheObj.exports
+        if (typeof module === "function" && module.__erd_have_loaded) {
+          // 当require过的路由模块（通过__erd_have_loaded属性来识别）即将被移除出缓存时，尝试调用其的onDestroy生命周期函数
+          let onDestroy = cacheObj.exports?.default?.onDestroy || cacheObj.exports?.onDestroy
+          if (typeof onDestroy === "function" && !onDestroy.__erd_hava_called) {
+            console.log("call onDestroy() of " + filename)
+            try {onDestroy.call(module)} catch (e) {console.error(e)}
+          }
+        }
+      }
       delete require.cache?.[filename]
     })
   }
-  const manager = new DynamicRouter(config)
   return (req, res, next) => {
     let listener
     let autoIndex = true
