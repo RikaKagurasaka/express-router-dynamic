@@ -102,8 +102,6 @@ class DynamicRouter {
   }
 
   findListener(url: string, req?: express.Request, autoIndex = false): express.Router | RequestHandler | null {
-    url = url.replace(/\/+$/, '')
-
     for (let realPrefix of this.config.realPrefix) {
       const targetFile = Path.join(realPrefix, url || '/')
       //如果目标是js文件（有后缀）
@@ -166,21 +164,25 @@ export function dynamicRouter(userConfig: Partial<typeof defaultConfig>): Reques
     let listener
     let autoIndex = true
     let questionMarkIndex = req.url.indexOf("?")
-    let currentFindUrl = (questionMarkIndex === -1? req.url: req.url.substring(0, questionMarkIndex)) || '/'
+    let originPath = (questionMarkIndex === -1? req.url: req.url.substring(0, questionMarkIndex))
+    let currentFindPath = originPath.replace(/\/+$/, '') || '/'
     // 对于获得的形如/aaa/bbb/ccc形式的url，应当依次查找/aaa/bbb/ccc、/aaa/bbb、/aaa、/ 四种listener，
     // 并在调用listener之前从req.url中删除已经匹配到的部分。
     // 例如，现在存在文件aaa/bbb.js，则应当以req.url="/ccc"来调用bbb.js中定义的Router。
     // 这是为了保证如果bbb.js中有router.get("/ccc", ()=>{})这样的语句时能够正确处理。
 
     while (true) {
-      listener = manager.findListener(currentFindUrl, req, autoIndex)
-      if (listener || currentFindUrl === "/") break // 找到了，或者已经找完根路径了，就立即停止查找
-      currentFindUrl = Path.dirname(currentFindUrl) // 否则，在父路径查找
+      listener = manager.findListener(currentFindPath, req, autoIndex)
+      if (listener || currentFindPath === "/") break // 找到了，或者已经找完根路径了，就立即停止查找
+      currentFindPath = Path.dirname(currentFindPath) // 否则，在父路径查找
       autoIndex = false
     }
 
     if (listener) {
-      req.url = '/' + Path.relative(currentFindUrl, req.url || '/').replace(/\\/g, "/")
+      if (currentFindPath !== "/") req.baseUrl += currentFindPath
+      req.url = '/' + Path.relative(currentFindPath, req.url || '/').replace(/\\/g, "/")
+      // 经测试发现，Path.relative('/aaa', '/aaa/bbb/')返回的是'bbb'。因此特判这种情况，在url最后加上一个/。
+      if (req.url.charAt(req.url.length - 1) !== "/" && originPath.charAt(originPath.length - 1) === "/") req.url += "/"
       listener(req, res, next)
     }
     else
