@@ -110,7 +110,7 @@ class DynamicRouter {
         for (let ignoreElement of this.config.ignore)
           if ((ignoreElement as Function)(targetFile))
             return null
-        let filename = Path.resolve('./' + Path.relative(__dirname, targetFile).replace(/\\/g, '/'))
+        let filename = Path.resolve(targetFile).replace(/\\/g, '/')
         let module = require(filename)
         module = module?.default || module
         // 如果是函数类型的对象，就返回路由
