@@ -179,6 +179,8 @@ export function dynamicRouter(userConfig: Partial<typeof defaultConfig>): Reques
     let autoIndex = true
     let questionMarkIndex = req.url.indexOf("?")
     let originPath = (questionMarkIndex === -1? req.url: req.url.substring(0, questionMarkIndex))
+    // 正规化路径，防止其越过站点根目录
+    originPath = Path.normalize(originPath)
     let currentFindPath = originPath.replace(/\/+$/, '') || '/'
     // 对于获得的形如/aaa/bbb/ccc形式的url，应当依次查找/aaa/bbb/ccc、/aaa/bbb、/aaa、/ 四种listener，
     // 并在调用listener之前从req.url中删除已经匹配到的部分。
