@@ -2,6 +2,9 @@
 [![Build Status](https://travis-ci.org/RikaSugisawa/express-router-dynamic.svg)](https://travis-ci.org/RikaSugisawa/express-router-dynamic)
 
 # express-router-dynamic
+
+> DEPRECATED: v1.x is deprecated and will not receive maintenance (except for high severity security vulnerabilities). You should upgrade to v2, which brings extra features and convenience.
+
 A router used for load more routers based on directory structure.
 
 ## Usage
