@@ -1,207 +1,245 @@
-import "core-js/stable";
-import "regenerator-runtime/runtime";
-import * as Fs from "fs";
-import {promisify} from 'util'
-import * as Path from "path";
-import * as express from "express";
-import {RequestHandler} from "express";
+import {Config, getConfigAfterMergingDefault} from "./config";
+import {NextFunction, RequestHandler, Response, Request} from "express";
+import {bindSelf, extendPrototype} from "@starrah/prototype-utils";
+import path from "path";
+import _, {debounce} from "lodash";
+import log4js from "log4js";
+import Dict = NodeJS.Dict;
+import chokidar, {FSWatcher} from "chokidar"
+import serveStatic from "serve-static";
+import anymatch from "anymatch"
+import http from "http";
+import {existsAsync, hookNames, Hooks} from "./utils";
+import URL from "url-parse"
 
-const defaultConfig = {
-  //本地路由根目录，相对于package.json，会按照顺序搜索
-  realPrefix: [],
-  //该目录下的不会作为路由文件，但是会被检测热更新
-  libPrefix: [],
-  //当请求目标为目录时，按照此顺序寻找对应的路由
-  autoIndex: ["index", "index.html", "index.js"],
-  //屏蔽符合以下条件的文件（对路由文件无效），支持文件名通配、正则和自定义函数。参数为本地真实路径
-  ignore: [
-    '*.ts',
-    '*.lib.js',
-    '*.json',
-    s => s.endsWith('.map'),
-    /\/config\..+$/
-  ],
+export interface DynamicRouter extends Function, RequestHandler, Config {
+
 }
 
+export class DynamicRouter {
+    handlers: Dict<{ handler: RequestHandler } & Hooks> = {}
+    nofile_cache: Set<string> = new Set()
+    watcher: FSWatcher
+    extra_watchers: FSWatcher[] = []
+    logger = log4js.getLogger("DynamicRouter")
+    serve_static: serveStatic.RequestHandler<http.ServerResponse>
 
-type FsWatchCallback = (event: 'rename' | 'change', filename: string) => any
+    private debounceQueue: Dict<boolean> = {}
+    private shouldClearCache = false
+    private _debouncedUpdateHandlers
 
-async function watchRecursively(path: string, extraCallback?: FsWatchCallback) {
-  let watchers: Record<string, Fs.FSWatcher> = {}
+    constructor(config: Config) {
+        Object.assign(this, getConfigAfterMergingDefault(config))
+        this.logger.level = this.log_level
+        const that = bindSelf(this.__call__)
 
-  const callback: FsWatchCallback = async (event, filename) => {
-    extraCallback(event, filename)
-    let stat
-    try {
-      stat = await promisify(Fs.stat)(filename)
-    } catch (e) {}
+        this.serve_static = serveStatic(this.prefix)
+        this._debouncedUpdateHandlers = debounce(this._updateHandlers.bind(that), this.debounceWait)
 
-    if (event == "rename" && !stat) {
-      watchers[filename]?.close()
-      delete watchers[filename]
+        this.watcher = chokidar.watch(this.prefix, {ignoreInitial: true, cwd: "."})
+        this.watcher.on("all", (event, filename) => this._onFileChanged.call(that, event, filename, false))
+        this.watcher.on("error", (e) => this.logger.error(`Chokidar: error:`, e))
+        this.watcher.on("ready", () => this.logger.info(`Start watching ${this.prefix}`))
+
+        for (const p of this.extra_watch) {
+            const watcher = chokidar.watch(p, {ignoreInitial: true, cwd: "."})
+            watcher.on("all", (event, filename) => this._onFileChanged.call(that, event, filename, true))
+            watcher.on("error", (e) => this.logger.warn(`Chokidar: error on extra watch:`, e))
+            watcher.on("ready", () => this.logger.info(`Extra watch: start watching ${p}`))
+            this.extra_watchers.push(watcher)
+        }
+
+        return extendPrototype(that, this)
     }
-    else if (event == "rename" && stat && stat.isDirectory()) {
-      watch(filename)
-    }
-  }
 
-  function watch(dirname: string = path) {
-    (async () => {
-      watchers[dirname]?.close()
-      watchers[dirname] = Fs.watch(dirname,
-        (event, filename) => {
-          try {
-            callback(event as any, Path.join(dirname, filename))
-          } catch (e) {
-            console.warn(e.message)
-          }
+    private async __call__(req: Request, res: Response, next: NextFunction) {
+        const urlObj = new URL(req.url)
+        if (!urlObj.pathname.startsWith("/")) urlObj.set("pathname", "/" + urlObj.pathname)
+        urlObj.set("pathname", path.normalize(urlObj.pathname))
+        req.url = urlObj.toString()
+
+        let toTryPaths = [{path: req.path, rela: "/"}] // 最高优先级：path本身
+        // 次高优先级：path作为目录，其下的index文件
+        toTryPaths = toTryPaths.concat(this.index.map(v => ({
+            path: path.join(req.path, v),
+            rela: "/"
+        })))
+        // 接下来优先级：向上查找直到root，只找js文件
+        let curPath = req.path
+        while (curPath.length > 1) {
+            toTryPaths = toTryPaths.concat(this.exec_suffix.map(s => ({
+                path: curPath + s,
+                rela: "/" + path.relative(curPath, req.path)
+            })))
+            curPath = path.dirname(curPath)
+        }
+        // 最后一个优先级：/__default__.route.js等
+        toTryPaths = toTryPaths.concat(this.exec_suffix.map(s => ({path: "/__default__" + s, rela: req.path})))
+
+        // 去掉开头的slash
+        toTryPaths = toTryPaths.map(v => {
+            v.path = v.path.replace(/^\/*/, "");
+            return v
         })
-        .addListener('error', (err: any) => {
-            console.warn(err.message, dirname)
-          }
-        )
-      for await(let dir of await promisify(Fs.opendir)(dirname)) {
-        if (dir.isDirectory())
-          watch(Path.join(dirname, dir.name))
-      }
-    })().catch(reason => {
-      console.warn(reason.message)
-    })
-  }
+        // 排除exclude的文件
+        toTryPaths = toTryPaths.filter(({path}) => !anymatch(this.exclude, path))
 
-  watch()
-
-}
-
-function wrapIgnorance(re: string | RegExp | ((s: string) => boolean)): ((s: string) => boolean) {
-  if (typeof re === "string") {
-    return wrapIgnorance(
-      new RegExp(re.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          .replace('\\*', '[^.*?/\\:]+')
-          .replace('\\?', '[^.*?/\\:]')
-        + '$', 'is')
-    )
-  } else if (typeof re === "object") {
-    return wrapIgnorance((s: string) => !!s.match(re))
-  } else {
-    return (s) => re(s.replace(new RegExp('\\' + Path.sep, 'g'), '/'))
-  }
-}
-
-function sendFileRouter(file: string): RequestHandler {
-  return ((req, res) => {
-    res.sendFile(Path.resolve(file))
-  })
-}
-
-class DynamicRouter {
-  config: typeof defaultConfig
-
-  constructor(config: typeof defaultConfig) {
-    this.config = config
-  }
-
-  findListener(url: string, req?: express.Request, autoIndex = false): express.Router | RequestHandler | null {
-    for (let realPrefix of this.config.realPrefix) {
-      const targetFile = Path.join(realPrefix, url || '/')
-      //如果目标是js文件（有后缀）
-      if (Fs.existsSync(targetFile) && targetFile.endsWith('.js')) {
-        //且不被屏蔽
-        for (let ignoreElement of this.config.ignore)
-          if ((ignoreElement as Function)(targetFile))
-            return null
-        let filename = Path.resolve(targetFile).replace(/\\/g, '/')
-        let module = require(filename)
-        module = module?.default || module
-        // 如果是函数类型的对象，就返回路由
-        // 这里注意判断router所用的express原型应与app的保持一致（否则可能由于express版本不同导致出问题）
-        if (module && typeof module == "function")
-          module.__erd_have_loaded = true // 为所有load进来的路由对象增加一个标志。
-          return module as express.Router
-        //否则继续处理（因为考虑到网站可能会有浏览器直接加载的js文件静态分发的情况）
-      }
-      //如果存在对应js文件
-      if (Fs.existsSync(targetFile + '.js'))
-        return this.findListener(url + '.js', req)
-
-      // 如果目标原始路径存在
-      if (Fs.existsSync(targetFile)) {
-        //且不被屏蔽
-        for (let ignoreElement of this.config.ignore)
-          if ((ignoreElement as Function)(targetFile))
-            return null
-        const fileStatus = Fs.statSync(targetFile)
-        if (fileStatus.isFile())
-          //如果是文件直接返回
-          return sendFileRouter(targetFile)
-        else if (fileStatus.isDirectory() && autoIndex) {
-          //如果是目录或无后缀的js
-          //按autoIndex顺序依次检查目录下的文件
-          let router = null
-          for (const filename of this.config.autoIndex)
-            //查找到了就返回
-            if ((router = this.findListener(url + '/' + filename, req)))
-              return router
+        for (const {path: p, rela} of toTryPaths) {
+            const filename = path.resolve(path.join(this.prefix, p))
+            try {
+                const processed = await this._tryFile(filename, rela, req, res, next)
+                if (processed) return
+            } catch (e) {
+                next(e)
+                return
+            }
         }
-      }
+        next() // 假如这里没有任何人能处理，就交给next
     }
-    return null
-  }
-}
 
-export function dynamicRouter(userConfig: Partial<typeof defaultConfig>): RequestHandler {
-  const config = Object.fromEntries(Object.entries(defaultConfig).map(([k, v]) => [k, userConfig?.[k] || v])) as typeof defaultConfig
-  if (typeof config.realPrefix === "string") config.realPrefix = [config.realPrefix]
-  if (typeof config.libPrefix === "string") config.libPrefix = [config.libPrefix]
-  config.ignore = config.ignore.map(value => wrapIgnorance(value))
-
-  const manager = new DynamicRouter(config)
-  for (let path of [...config.realPrefix, ...config.libPrefix]) {
-    watchRecursively(Path.resolve(path), (event, filename) => {
-      console.log(event, filename)
-      let cacheObj = require.cache?.[filename]
-      if (cacheObj) {
-        let module = cacheObj.exports?.default || cacheObj.exports
-        if (typeof module === "function" && module.__erd_have_loaded) {
-          // 当require过的路由模块（通过__erd_have_loaded属性来识别）即将被移除出缓存时，尝试调用其的onDestroy生命周期函数
-          let onDestroy = cacheObj.exports?.default?.onDestroy || cacheObj.exports?.onDestroy
-          if (typeof onDestroy === "function" && !onDestroy.__erd_hava_called) {
-            console.log("call onDestroy() of " + filename)
-            try {onDestroy.call(module)} catch (e) {console.error(e)}
-          }
+    private async _tryFile(filename: string, rela: string, req: Request, res: Response, next: NextFunction): Promise<boolean> {
+        if (this._canExec(filename)) {
+            if (!this.handlers[filename]) {
+                // 先检查存不存在，不存在就记录下来，存在就加入缓存
+                if (this.nofile_cache.has(filename)) return false
+                if (!(await existsAsync(filename))) {
+                    this.nofile_cache.add(filename)
+                    return false
+                }
+                this._loadHandler(filename)
+            }
+            try {
+                const urlObj = new URL(req.url)
+                urlObj.set("pathname", rela)
+                req.url = urlObj.toString()
+                await this.handlers[filename].handler(req, res, next)
+                return true
+            } catch (e) {
+                if (this.handler_error_log_level) this.logger[this.handler_error_log_level](`Error in handler ${filename}:`, e)
+                next(e)
+                return true
+            }
+        } else {
+            // @ts-ignore
+            await new Promise((resolve, reject) => this.serve_static(req, res, (err) => err ? reject(err) : resolve()))
+            return false
         }
-      }
-      delete require.cache?.[filename]
-    })
-  }
-  return (req, res, next) => {
-    let listener
-    let autoIndex = true
-    let questionMarkIndex = req.url.indexOf("?")
-    let originPath = (questionMarkIndex === -1? req.url: req.url.substring(0, questionMarkIndex))
-    // 正规化路径，防止其越过站点根目录
-    originPath = Path.normalize(originPath)
-    let currentFindPath = originPath.replace(/\/+$/, '') || '/'
-    // 对于获得的形如/aaa/bbb/ccc形式的url，应当依次查找/aaa/bbb/ccc、/aaa/bbb、/aaa、/ 四种listener，
-    // 并在调用listener之前从req.url中删除已经匹配到的部分。
-    // 例如，现在存在文件aaa/bbb.js，则应当以req.url="/ccc"来调用bbb.js中定义的Router。
-    // 这是为了保证如果bbb.js中有router.get("/ccc", ()=>{})这样的语句时能够正确处理。
-
-    while (true) {
-      listener = manager.findListener(currentFindPath, req, autoIndex)
-      if (listener || currentFindPath === "/") break // 找到了，或者已经找完根路径了，就立即停止查找
-      currentFindPath = Path.dirname(currentFindPath) // 否则，在父路径查找
-      autoIndex = false
     }
 
-    if (listener) {
-      if (currentFindPath !== "/") req.baseUrl += currentFindPath
-      req.url = '/' + Path.relative(currentFindPath, req.url || '/').replace(/\\/g, "/")
-      // 经测试发现，Path.relative('/aaa', '/aaa/bbb/')返回的是'bbb'。因此特判这种情况，在url最后加上一个/。
-      if (req.url.charAt(req.url.length - 1) !== "/" && originPath.charAt(originPath.length - 1) === "/") req.url += "/"
-      listener(req, res, next)
+    private _canExec(filename: string) {
+        return !!this.exec_suffix.find(s => filename.endsWith(s))
     }
-    else
-      next()
-  }
+
+    private _onFileChanged(event: string, filename: string, extra_watch = false) {
+        filename = path.resolve(filename)
+        this.logger.debug(`Chokidar: ${event}: ${filename}`)
+        if ((event === "add" || event === "change" || event === "unlink")) {
+            this.nofile_cache.delete(filename)
+            if (!extra_watch && this._canExec(filename)) {
+                // 当变化的文件是有效路由文件时，将该行为记录在队列中，等待debounce结束进行处理。
+                this.shouldClearCache = true
+                if (event === "unlink") {
+                    if (!this.debounceQueue[filename]) this.debounceQueue[filename] = false
+                } else this.debounceQueue[filename] = true
+                this._debouncedUpdateHandlers()
+            } else if (filename.endsWith(".js")) {
+                // 否则对于非路由文件的js，只删除这个文件的require缓存
+                delete require.cache[filename]
+                this.logger[!this.clear_require_cache ? "info" : "debug"](`${extra_watch ? "Extra watch: " : ""}Deleted require cache of ${filename}`)
+            }
+        }
+    }
+
+    private _updateHandlers() {
+        if (!this.force_full_reload) {
+            // 只移除发生改变的
+            for (const k in this.debounceQueue) {
+                this._updateHandler(k, this.debounceQueue[k])
+            }
+        } else {
+            // 移除现在所有的
+            for (const k in this.handlers) {
+                this._updateHandler(k, this.debounceQueue[k] !== false, false)
+            }
+            if (!this.load_on_demand) this.logger.info(`All handlers reloaded!`)
+            else this.logger.info(`All handlers removed!`)
+        }
+        for (const k in this.debounceQueue) {
+            delete this.debounceQueue[k]
+        }
+    }
+
+    private _updateHandler(filename: string, shouldReload: boolean, verbose = true) {
+        let verb, hooks = []
+        const relaPath = path.relative(this.prefix, filename)
+        if (this.handlers[filename]) {
+            this._invokeHookFn(filename, "onDestroy")
+            delete this.handlers[filename]
+            verb = "Removed"
+        }
+        if (!this.load_on_demand && shouldReload) {
+            try {
+                hooks = this._loadHandler(filename, false)
+                verb = verb === "Removed" ? "Reloaded" : "Loaded"
+            } catch (e) {
+                if (verb === "Removed") this.logger.info(`Removed handler ${relaPath}, but reloading had failed.`)
+                verbose = false // 防止下方再次打印log
+            }
+        }
+        if (verbose && verb) this.logger.info(`${verb} handler ${relaPath}${hooks.length ? `, loaded hooks: ${hooks.join(",")}` : ""}`)
+    }
+
+    private _loadHandler(filename: string, verbose = true): string[] {
+        if (this.clear_require_cache && this.shouldClearCache) {
+            this.shouldClearCache = false
+            for (const k in require.cache) {
+                delete require.cache[k]
+            }
+            this.logger.debug("Require cache cleared.")
+        } else {
+            delete require.cache[filename]
+        }
+
+        const relaPath = path.relative(this.prefix, filename)
+        let exports
+        try {
+            exports = require(filename)
+        } catch (e) {
+            this.logger.error(`Failed to load ${relaPath}: require failed:`, e)
+            throw e
+        }
+        let handler = exports.default
+        if (typeof handler !== "function") handler = exports
+        if (typeof handler !== "function") handler = undefined
+        if (!handler) {
+            this.logger.error(`Failed to load ${relaPath}: module's default export is not a function`)
+            throw new Error(`module's default export is not a function`)
+        }
+
+        const existedHooks = {}
+        for (const hookName of hookNames) {
+            let hook = handler[hookName]
+            if (typeof hook !== "function") hook = exports[hookName]
+            if (typeof hook !== "function") hook = undefined
+            if (hook) existedHooks[hookName] = hook
+        }
+
+        this.handlers[filename] = {handler, ...existedHooks}
+        const hooks = _.keys(existedHooks)
+        if (verbose) {
+            this.logger.info(`Loaded handler ${relaPath}${hooks.length ? `, loaded hooks: ${hooks.join(",")}` : ""}`)
+        }
+        return hooks
+    }
+
+    private _invokeHookFn(filename: string, hookName: string, ...args) {
+        if (typeof this.handlers[filename]?.[hookName] === "function") {
+            try {
+                this.handlers[filename]?.[hookName].apply(this, args)
+                this.logger.info(`${hookName} Hook invoked for ${filename}`)
+            } catch (e) {
+                this.logger.warn(`Error encountered while invoking ${hookName} Hook for ${filename}:`, e)
+            }
+        }
+    }
 }

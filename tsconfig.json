@@ -1,14 +1,14 @@
 {
-
   "compilerOptions": {
-    "module": "commonjs",
-    "target": "es2019",
+    "module": "CommonJS",
+    "target": "ES2019",
     "sourceMap": true,
-    "strict": false,
-    "allowSyntheticDefaultImports": true,
-    "resolveJsonModule": true
+    "experimentalDecorators": true,
+    "esModuleInterop": true
   },
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "bld",
+    "example"
   ]
 }
