@@ -78,6 +78,22 @@ export interface Config {
      * 默认值：[]
      */
     extra_watch?: string[]
+
+    /**
+     * 实验性特性警告：此配置所对应的特性是实验性的，可能随时更改！
+     *
+     * 加载handler时，使用import而不是require（见 http://nodejs.cn/api/esm.html#import-statements）。
+     * 可选值：false（总是使用require）、true（总是使用import）、"when_require_failed"（仅当require失败时才尝试使用import）。
+     * 这样做使得动态加载es module成为可能，但是，也会引入两个巨大的弊端：
+     * 1. 内存泄露。由于目前没有有效的清除Node的ESM加载器的缓存的机制（参见 https://github.com/nodejs/help/issues/2806 , https://github.com/nodejs/help/issues/1399），在发生更新时即使加载了新的文件，旧的对象也无法被释放内存。
+     * 2. 路由文件中凡是通过import导入的其他模块（无论是ESM还是CJS）不会被重新加载。通过require导入的不受影响。
+     *    具体而言：
+     *      i. require时确保依赖重新加载的机制是将整个require.cache清空（配置项clear_require_cache正是控制这一行为的）。
+     *      ii. import时，确保路由文件本身能够重新加载的机制是在文件名后加上形如`?ERD=${Date.now()}`的字符串，通过每次传给import的参数不同，确保import不会直接命中缓存。然而对于路由文件内部import的其他文件，我们无法操作其解析出来的文件名。
+     *      iii. 可以通过自定义加载器钩子（http://nodejs.cn/api/esm.html#loaders）来规避这一弊端。用法：在启动node时加上参数"--experimental-loader node_modules/express-router-dynamic/esm_loader.mjs"。这一ESM加载器实现了对所有的import都附加随机参数。当然，内存泄漏可能也会变得更严重。
+     * 默认值：false
+     */
+    use_esm_import?: boolean | "when_require_failed"
 }
 
 const defaultConfig: Partial<Config> = {
@@ -90,7 +106,8 @@ const defaultConfig: Partial<Config> = {
     load_on_demand: true,
     clear_require_cache: true,
     force_full_reload: false,
-    extra_watch: []
+    extra_watch: [],
+    use_esm_import: false
 }
 
 export function getConfigAfterMergingDefault(config: Config): Config {

@@ -34,6 +34,7 @@ export class DynamicRouter {
         Object.assign(this, getConfigAfterMergingDefault(config))
         this.logger.level = this.log_level
         const that = bindSelf(this.__call__)
+        if (this.use_esm_import !== false) this.logger.warn(`ExperimentalWarning: use_esm_import is an experimental feature. This feature could change at any time`)
 
         this.serve_static = serveStatic(this.prefix)
         this._debouncedUpdateHandlers = debounce(this._updateHandlers.bind(that), this.debounceWait)
@@ -215,10 +216,20 @@ export class DynamicRouter {
         const relaPath = path.relative(this.prefix, filename)
         let exports
         try {
-            exports = require(filename)
+            if (this.use_esm_import === true) exports = await import(filename)
+            else exports = require(filename)
         } catch (e) {
-            this.logger.error(`Failed to load ${relaPath}: require failed:`, e)
-            throw e
+            if (this.use_esm_import === "when_require_failed") {
+                try {
+                    exports = await import(filename)
+                } catch (e) {
+                    this.logger.error(`Failed to load ${relaPath}: require and import failed:`, e)
+                    throw e
+                }
+            } else {
+                this.logger.error(`Failed to load ${relaPath}: ${this.use_esm_import === true ? "import" : "require"} failed:`, e)
+                throw e
+            }
         }
         let handler = exports.default
         if (typeof handler !== "function") handler = exports
