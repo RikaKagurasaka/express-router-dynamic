@@ -11,6 +11,7 @@ import anymatch from "anymatch"
 import http from "http";
 import {existsAsync, hookNames, Hooks} from "./utils";
 import URL from "url-parse"
+import AwaitLock from "await-lock";
 
 export interface DynamicRouter extends Function, RequestHandler, Config {
 
@@ -27,6 +28,7 @@ export class DynamicRouter {
     private debounceQueue: Dict<boolean> = {}
     private shouldClearCache = false
     private _debouncedUpdateHandlers
+    private lock = new AwaitLock()
 
     constructor(config: Config) {
         Object.assign(this, getConfigAfterMergingDefault(config))
@@ -106,7 +108,12 @@ export class DynamicRouter {
                     this.nofile_cache.add(filename)
                     return false
                 }
-                this._loadHandler(filename)
+                await this.lock.acquireAsync()
+                try {
+                    await this._loadHandler(filename)
+                } finally {
+                    this.lock.release()
+                }
             }
             try {
                 const urlObj = new URL(req.url)
@@ -150,26 +157,31 @@ export class DynamicRouter {
         }
     }
 
-    private _updateHandlers() {
-        if (!this.force_full_reload) {
-            // 只移除发生改变的
+    private async _updateHandlers() {
+        await this.lock.acquireAsync()
+        try {
+            if (!this.force_full_reload) {
+                // 只移除发生改变的
+                for (const k in this.debounceQueue) {
+                    await this._updateHandler(k, this.debounceQueue[k])
+                }
+            } else {
+                // 移除现在所有的
+                for (const k in this.handlers) {
+                    await this._updateHandler(k, this.debounceQueue[k] !== false, false)
+                }
+                if (!this.load_on_demand) this.logger.info(`All handlers reloaded!`)
+                else this.logger.info(`All handlers removed!`)
+            }
             for (const k in this.debounceQueue) {
-                this._updateHandler(k, this.debounceQueue[k])
+                delete this.debounceQueue[k]
             }
-        } else {
-            // 移除现在所有的
-            for (const k in this.handlers) {
-                this._updateHandler(k, this.debounceQueue[k] !== false, false)
-            }
-            if (!this.load_on_demand) this.logger.info(`All handlers reloaded!`)
-            else this.logger.info(`All handlers removed!`)
-        }
-        for (const k in this.debounceQueue) {
-            delete this.debounceQueue[k]
+        } finally {
+            this.lock.release()
         }
     }
 
-    private _updateHandler(filename: string, shouldReload: boolean, verbose = true) {
+    private async _updateHandler(filename: string, shouldReload: boolean, verbose = true) {
         let verb, hooks = []
         const relaPath = path.relative(this.prefix, filename)
         if (this.handlers[filename]) {
@@ -179,7 +191,7 @@ export class DynamicRouter {
         }
         if (!this.load_on_demand && shouldReload) {
             try {
-                hooks = this._loadHandler(filename, false)
+                ({hooks} = await this._loadHandler(filename, false))
                 verb = verb === "Removed" ? "Reloaded" : "Loaded"
             } catch (e) {
                 if (verb === "Removed") this.logger.info(`Removed handler ${relaPath}, but reloading had failed.`)
@@ -189,7 +201,7 @@ export class DynamicRouter {
         if (verbose && verb) this.logger.info(`${verb} handler ${relaPath}${hooks.length ? `, loaded hooks: ${hooks.join(",")}` : ""}`)
     }
 
-    private _loadHandler(filename: string, verbose = true): string[] {
+    private async _loadHandler(filename: string, verbose = true): Promise<{ hooks: string[] }> {
         if (this.clear_require_cache && this.shouldClearCache) {
             this.shouldClearCache = false
             for (const k in require.cache) {
@@ -229,7 +241,7 @@ export class DynamicRouter {
         if (verbose) {
             this.logger.info(`Loaded handler ${relaPath}${hooks.length ? `, loaded hooks: ${hooks.join(",")}` : ""}`)
         }
-        return hooks
+        return {hooks}
     }
 
     private _invokeHookFn(filename: string, hookName: string, ...args) {
