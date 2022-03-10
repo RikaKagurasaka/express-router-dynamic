@@ -12,9 +12,18 @@ export interface Config {
      * 允许被作为路由处理器，执行代码的文件的匹配规则。
      * 只有一个文件的后缀与此处定义的规则匹配时，才会将其require进来，并将其中的default导出的函数作为RequestHandler，执行其代码。
      * **请注意：在默认情况下，只有以.route.js或.hjs文件才会被执行代码！一般的js只会被作为静态文件分发！**
+     * 同时，与这里定义的后缀匹配的文件是不需要与请求URL完全匹配就可以被serve的，例如假设存在a.route.js文件，则URL为/a、/a.route.js时都可以访问到。
      * 默认值：[".route.js", ".hjs"]
      */
     exec_suffix?: string[]
+
+    /**
+     * 作为静态文件分发时，允许隐式推断的文件后缀。
+     * 与这里定义的后缀匹配的文件是不需要与请求URL完全匹配就可以被serve的，例如若定义infer_suffix为[".html"]，假设存在b.html文件，则URL为/b、/b.html时都可以访问到该文件。
+     * static_suffix的优先级总是低于exec_suffix。
+     * 默认值：[]
+     */
+    static_suffix?: string[]
 
     /**
      * 除外规则。
@@ -74,7 +83,7 @@ export interface Config {
 
     /**
      * 不serve内容、但是监视其中的js文件修改，每当修改时清空该文件的cache。
-     * 仅在no_require_cache为false时才生效。
+     * 仅在clear_require_cache为false时才有必要，因为clear_require_cache为true时，任何路由文件的变化会清空全部的require缓存。。
      * 默认值：[]
      */
     extra_watch?: string[]
@@ -98,6 +107,7 @@ export interface Config {
 
 const defaultConfig: Partial<Config> = {
     exec_suffix: [".route.js", ".hjs"],
+    static_suffix: [],
     exclude: ["*.ts", "*.js.map"],
     index: ["index.route.js", "index.html", "index.js"],
     log_level: "info",

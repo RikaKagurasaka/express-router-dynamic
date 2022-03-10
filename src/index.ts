@@ -1,17 +1,16 @@
 import {Config, getConfigAfterMergingDefault} from "./config";
-import {NextFunction, RequestHandler, Response, Request} from "express";
+import {NextFunction, Request, RequestHandler, Response} from "express";
 import {bindSelf, extendPrototype} from "@starrah/prototype-utils";
 import path from "path";
 import _, {debounce} from "lodash";
-import log4js from "log4js";
-import Dict = NodeJS.Dict;
+import log4js from "@log4js-node/log4js-api";
 import chokidar, {FSWatcher} from "chokidar"
 import serveStatic from "serve-static";
 import anymatch from "anymatch"
 import http from "http";
-import {existsAsync, hookNames, Hooks} from "./utils";
-import URL from "url-parse"
+import {existsAsync, hookNames, Hooks, reqSetPath} from "./utils";
 import AwaitLock from "await-lock";
+import Dict = NodeJS.Dict;
 
 export interface DynamicRouter extends Function, RequestHandler, Config {
 
@@ -25,6 +24,7 @@ export class DynamicRouter {
     logger = log4js.getLogger("DynamicRouter")
     serve_static: serveStatic.RequestHandler<http.ServerResponse>
 
+    private _destroyed = false
     private debounceQueue: Dict<boolean> = {}
     private shouldClearCache = false
     private _debouncedUpdateHandlers
@@ -36,7 +36,7 @@ export class DynamicRouter {
         const that = bindSelf(this.__call__)
         if (this.use_esm_import !== false) this.logger.warn(`ExperimentalWarning: use_esm_import is an experimental feature. This feature could change at any time`)
 
-        this.serve_static = serveStatic(this.prefix)
+        this.serve_static = serveStatic(this.prefix, {index: false, redirect: false})
         this._debouncedUpdateHandlers = debounce(this._updateHandlers.bind(that), this.debounceWait)
 
         this.watcher = chokidar.watch(this.prefix, {ignoreInitial: true, cwd: "."})
@@ -56,10 +56,15 @@ export class DynamicRouter {
     }
 
     private async __call__(req: Request, res: Response, next: NextFunction) {
-        const urlObj = new URL(req.url)
-        if (!urlObj.pathname.startsWith("/")) urlObj.set("pathname", "/" + urlObj.pathname)
-        urlObj.set("pathname", path.normalize(urlObj.pathname))
-        req.url = urlObj.toString()
+        if (this._destroyed) {
+            this.logger.error(`DynamicRouter on ${this.prefix} had been destroyed, cannot process request!`)
+            next(new Error("DynamicRouter had been destroyed!"))
+        }
+
+        let processed_path = req.path
+        if (!processed_path.startsWith("/")) processed_path = "/" + processed_path
+        processed_path = path.normalize(processed_path)
+        reqSetPath(req, processed_path)
 
         let toTryPaths = [{path: req.path, rela: "/"}] // 最高优先级：path本身
         // 次高优先级：path作为目录，其下的index文件
@@ -67,10 +72,11 @@ export class DynamicRouter {
             path: path.join(req.path, v),
             rela: "/"
         })))
-        // 接下来优先级：向上查找直到root，只找js文件
-        let curPath = req.path
+        // 接下来优先级：向上查找直到root，找exec_suffix和static_suffix
+        const both_suffix = this.exec_suffix.concat(this.static_suffix)
+        let curPath = req.path.endsWith("/") ? req.path.slice(0, -1) : req.path // 当url末尾是/时应当去掉
         while (curPath.length > 1) {
-            toTryPaths = toTryPaths.concat(this.exec_suffix.map(s => ({
+            toTryPaths = toTryPaths.concat(both_suffix.map(s => ({
                 path: curPath + s,
                 rela: "/" + path.relative(curPath, req.path)
             })))
@@ -87,10 +93,9 @@ export class DynamicRouter {
         // 排除exclude的文件
         toTryPaths = toTryPaths.filter(({path}) => !anymatch(this.exclude, path))
 
-        for (const {path: p, rela} of toTryPaths) {
-            const filename = path.resolve(path.join(this.prefix, p))
+        for (const {path, rela} of toTryPaths) {
             try {
-                const processed = await this._tryFile(filename, rela, req, res, next)
+                const processed = await this._tryFile(path, rela, req, res, next)
                 if (processed) return
             } catch (e) {
                 next(e)
@@ -100,8 +105,9 @@ export class DynamicRouter {
         next() // 假如这里没有任何人能处理，就交给next
     }
 
-    private async _tryFile(filename: string, rela: string, req: Request, res: Response, next: NextFunction): Promise<boolean> {
-        if (this._canExec(filename)) {
+    private async _tryFile(path_: string, rela: string, req: Request, res: Response, next: NextFunction): Promise<boolean> {
+        if (this._canExec(path_)) {
+            const filename = path.resolve(path.join(this.prefix, path_))
             if (!this.handlers[filename]) {
                 // 先检查存不存在，不存在就记录下来，存在就加入缓存
                 if (this.nofile_cache.has(filename)) return false
@@ -116,10 +122,8 @@ export class DynamicRouter {
                     this.lock.release()
                 }
             }
+            reqSetPath(req, rela)
             try {
-                const urlObj = new URL(req.url)
-                urlObj.set("pathname", rela)
-                req.url = urlObj.toString()
                 await this.handlers[filename].handler(req, res, next)
                 return true
             } catch (e) {
@@ -128,6 +132,7 @@ export class DynamicRouter {
                 return true
             }
         } else {
+            reqSetPath(req, "/" + path_)
             // @ts-ignore
             await new Promise((resolve, reject) => this.serve_static(req, res, (err) => err ? reject(err) : resolve()))
             return false
@@ -180,6 +185,7 @@ export class DynamicRouter {
         } finally {
             this.lock.release()
         }
+        this.logger.debug("_updateHandlers finished")
     }
 
     private async _updateHandler(filename: string, shouldReload: boolean, verbose = true) {
@@ -192,7 +198,7 @@ export class DynamicRouter {
         }
         if (!this.load_on_demand && shouldReload) {
             try {
-                ({hooks} = await this._loadHandler(filename, false))
+                ({hooks} = await this._loadHandler(filename, false));
                 verb = verb === "Removed" ? "Reloaded" : "Loaded"
             } catch (e) {
                 if (verb === "Removed") this.logger.info(`Removed handler ${relaPath}, but reloading had failed.`)
@@ -265,4 +271,15 @@ export class DynamicRouter {
             }
         }
     }
+
+    async onDestroy() {
+        await this.watcher.close()
+        for (let watcher of this.extra_watchers) {
+            await watcher.close()
+        }
+        this._destroyed = true
+        this.logger.info(`DynamicRouter on ${this.prefix} is destroyed.`)
+    }
 }
+
+export default DynamicRouter

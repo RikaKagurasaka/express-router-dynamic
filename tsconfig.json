@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "module": "CommonJS",
+    "module": "nodenext",
     "target": "ES2019",
     "sourceMap": true,
     "experimentalDecorators": true,
@@ -8,7 +8,5 @@
   },
   "exclude": [
     "node_modules",
-    "bld",
-    "example"
   ]
 }

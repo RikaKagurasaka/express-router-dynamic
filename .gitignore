@@ -1,6 +1,8 @@
-node_modules/
-.idea
-src/**/*.js
-src/**/*.map
+/node_modules/
+/.idea/
+/src/**/*.js
+/src/**/*.map
+/test/**/*.js
+/test/**/*.map
 /test-local/
 /bld/

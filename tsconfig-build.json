@@ -1,13 +1,14 @@
 {
   "compilerOptions": {
-    "module": "CommonJS",
+    "module": "nodenext",
     "target": "ES2019",
-    "sourceMap": false,
+    "sourceMap": true,
     "experimentalDecorators": true,
     "esModuleInterop": true,
     "declaration": true,
+    "inlineSources": true,
     "rootDir": "src",
-    "outDir": "bld"
+    "outDir": "bld",
   },
   "include": [
     "src"
