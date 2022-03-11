@@ -1,4 +1,5 @@
 import {Matcher} from "anymatch"
+import {WatchOptions} from "chokidar";
 
 export interface Config {
     /**
@@ -89,6 +90,13 @@ export interface Config {
     extra_watch?: string[]
 
     /**
+     * 对prefix和extra_watch(如有)进行watch时，传入的options。
+     * 详见chokidar文档： https://www.npmjs.com/package/chokidar
+     * 默认值：{}
+     */
+    chokidar_options?: WatchOptions
+
+    /**
      * 实验性特性警告：此配置所对应的特性是实验性的，可能随时更改！
      *
      * 加载handler时，使用import而不是require（见 http://nodejs.cn/api/esm.html#import-statements）。
@@ -105,7 +113,7 @@ export interface Config {
     use_esm_import?: boolean | "when_require_failed"
 }
 
-const defaultConfig: Partial<Config> = {
+export const defaultConfig: Partial<Config> = {
     exec_suffix: [".route.js", ".hjs"],
     static_suffix: [],
     exclude: ["*.ts", "*.js.map"],
@@ -117,10 +125,11 @@ const defaultConfig: Partial<Config> = {
     clear_require_cache: true,
     force_full_reload: false,
     extra_watch: [],
+    chokidar_options: {},
     use_esm_import: false
 }
 
-export function getConfigAfterMergingDefault(config: Config): Config {
+export function mergeConfig<T>(config: T, defaultConfig: Partial<T>): T {
     for (let key in defaultConfig) {
         if (config[key] === undefined) {
             config[key] = defaultConfig[key]

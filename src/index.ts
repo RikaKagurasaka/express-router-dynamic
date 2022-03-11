@@ -1,4 +1,4 @@
-import {Config, getConfigAfterMergingDefault} from "./config";
+import {Config, defaultConfig, mergeConfig} from "./config";
 import {NextFunction, Request, RequestHandler, Response} from "express";
 import {bindSelf, extendPrototype} from "@starrah/prototype-utils";
 import path from "path";
@@ -24,14 +24,43 @@ export class DynamicRouter {
     logger = log4js.getLogger("DynamicRouter")
     serve_static: serveStatic.RequestHandler<http.ServerResponse>
 
+    get initialized() {
+        return this._initialized
+    }
+
+    get destroyed() {
+        return this._destroyed
+    }
+
+    /**
+     * 获得一个Promise，该Promise直到本DynamicRouter初始化完成后才会resolve。
+     */
+    tillInitialized(): Promise<void> {
+        return this._initializedPromise
+    }
+
+    async destroy() {
+        await this.watcher.close()
+        for (let watcher of this.extra_watchers) {
+            await watcher.close()
+        }
+        this._destroyed = true
+        this.logger.info(`DynamicRouter on ${this.prefix} is destroyed.`)
+    }
+
+    onDestroy = this.destroy
+
+    private _initialized = false
     private _destroyed = false
+    private _initializedPromiseResolver: () => void
+    private _initializedPromise: Promise<void> = new Promise(resolve => this._initializedPromiseResolver = resolve)
     private debounceQueue: Dict<boolean> = {}
     private shouldClearCache = false
     private _debouncedUpdateHandlers
     private lock = new AwaitLock()
 
     constructor(config: Config) {
-        Object.assign(this, getConfigAfterMergingDefault(config))
+        Object.assign(this, mergeConfig(config, defaultConfig))
         this.logger.level = this.log_level
         const that = bindSelf(this.__call__)
         if (this.use_esm_import !== false) this.logger.warn(`ExperimentalWarning: use_esm_import is an experimental feature. This feature could change at any time`)
@@ -39,13 +68,13 @@ export class DynamicRouter {
         this.serve_static = serveStatic(this.prefix, {index: false, redirect: false})
         this._debouncedUpdateHandlers = debounce(this._updateHandlers.bind(that), this.debounceWait)
 
-        this.watcher = chokidar.watch(this.prefix, {ignoreInitial: true, cwd: "."})
+        this.watcher = chokidar.watch(this.prefix, mergeConfig(this.chokidar_options, {cwd: "."}))
         this.watcher.on("all", (event, filename) => this._onFileChanged.call(that, event, filename, false))
         this.watcher.on("error", (e) => this.logger.error(`Chokidar: error:`, e))
         this.watcher.on("ready", () => this.logger.info(`Start watching ${this.prefix}`))
 
         for (const p of this.extra_watch) {
-            const watcher = chokidar.watch(p, {ignoreInitial: true, cwd: "."})
+            const watcher = chokidar.watch(p, mergeConfig(this.chokidar_options, {ignoreInitial: true, cwd: "."}))
             watcher.on("all", (event, filename) => this._onFileChanged.call(that, event, filename, true))
             watcher.on("error", (e) => this.logger.warn(`Chokidar: error on extra watch:`, e))
             watcher.on("ready", () => this.logger.info(`Extra watch: start watching ${p}`))
@@ -60,6 +89,7 @@ export class DynamicRouter {
             this.logger.error(`DynamicRouter on ${this.prefix} had been destroyed, cannot process request!`)
             next(new Error("DynamicRouter had been destroyed!"))
         }
+        await this.tillInitialized()
 
         let processed_path = req.path
         if (!processed_path.startsWith("/")) processed_path = "/" + processed_path
@@ -185,6 +215,11 @@ export class DynamicRouter {
         } finally {
             this.lock.release()
         }
+        if (!this._initialized) {
+            this._initialized = true
+            this._initializedPromiseResolver()
+            this.logger.info(`DynamicRouter @ ${this.prefix} initialization finished!`)
+        }
         this.logger.debug("_updateHandlers finished")
     }
 
@@ -270,15 +305,6 @@ export class DynamicRouter {
                 this.logger.warn(`Error encountered while invoking ${hookName} Hook for ${filename}:`, e)
             }
         }
-    }
-
-    async onDestroy() {
-        await this.watcher.close()
-        for (let watcher of this.extra_watchers) {
-            await watcher.close()
-        }
-        this._destroyed = true
-        this.logger.info(`DynamicRouter on ${this.prefix} is destroyed.`)
     }
 }
 
