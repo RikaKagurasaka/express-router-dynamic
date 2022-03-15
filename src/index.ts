@@ -15,11 +15,11 @@ import chokidar, {FSWatcher} from "chokidar"
 import serveStatic from "serve-static";
 import anymatch from "anymatch"
 import http from "http";
-import {existsAsync, hookNames, Hooks, reqSetPath, RLS} from "./utils";
+import {existsAsync, hookNames, Hooks, Prefix$IsAny, reqSetPath, RLS} from "./utils";
 import AwaitLock from "await-lock";
 import Dict = NodeJS.Dict;
 
-export interface DynamicRouter extends Function, RequestHandler {
+export interface DynamicRouter extends Function, RequestHandler, Prefix$IsAny {
 
 }
 
@@ -177,8 +177,12 @@ export class DynamicRouter {
                 }
             }
             reqSetPath(req, rela)
+            // @ts-ignore
+            req.$router = this;
+            // @ts-ignore
+            res.$router = this;
             try {
-                await this.handlers[filename].handler(req, res, next)
+                await this.handlers[filename].handler.call(this, req, res, next)
                 return true
             } catch (e) {
                 if (config.handler_error_log_level) this.logger[config.handler_error_log_level](`Error in handler ${filename}:`, e)
