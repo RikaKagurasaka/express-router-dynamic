@@ -102,7 +102,10 @@ THere are two types of config: instance-level config (`Config`) and directory-le
 Instance-level config should be specified as the argument of constructor, and cannot (should not) be modified later.  
 Directory-level can be specified in each directory in the `webroot`, which will also be watched and reloaded once changed.
 
-#### 
+#### Reference
+Please see [config.ts](./src/config.ts), which has full instructions and detailed notes about all available config terms. 
+
+We are sorry that there are only Chinese notes in `config.ts`. Translations are highly welcomed.
 
 ## Remind
 - On some platforms (e.g. Windows), executing `npm install` under a watched directory (i.e. directory that are set 
