@@ -530,6 +530,11 @@ describe('Security', function () {
         expect(status).equal(404)
     });
 
+    it('should not serve node_modules', async function () {
+        const {status} = await axios.get("/n/node_modules/dynamic.route.js", {validateStatus: () => true})
+        expect(status).equal(404)
+    });
+
     it('should not get out of webroot', async function () {
         let {status} = await axios.get("/../suffixB.html", {validateStatus: () => true})
         expect(status).equal(404);
