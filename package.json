@@ -7,11 +7,12 @@
   "scripts": {
     "build-dev": "tsc",
     "build": "tsc -b tsconfig-build.json",
-    "test": "npm run build-dev &&  mocha -b --exit"
+    "test": "npm run build-dev && mocha -b --exit"
   },
   "dependencies": {
     "@log4js-node/log4js-api": "^1.0.2",
     "@starrah/prototype-utils": "^0.1.1",
+    "anymatch": "github:Starrah/anymatch",
     "await-lock": "^2.1.0",
     "chokidar": "^3.5.3",
     "lodash": "^4.17.21",

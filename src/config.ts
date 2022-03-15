@@ -1,6 +1,9 @@
 import {Matcher} from "anymatch"
 import {WatchOptions} from "chokidar";
 
+/**
+ * DynamicRouter对象的实例级别配置，在构造new DynamicRouter对象的时候传入。
+ */
 export interface Config {
     /**
      * 路由根目录。
@@ -10,21 +13,14 @@ export interface Config {
     prefix: string
 
     /**
-     * 允许被作为路由处理器，执行代码的文件的匹配规则。
-     * 只有一个文件的后缀与此处定义的规则匹配时，才会将其require进来，并将其中的default导出的函数作为RequestHandler，执行其代码。
-     * **请注意：在默认情况下，只有以.route.js或.hjs文件才会被执行代码！一般的js只会被作为静态文件分发！**
-     * 同时，与这里定义的后缀匹配的文件是不需要与请求URL完全匹配就可以被serve的，例如假设存在a.route.js文件，则URL为/a、/a.route.js时都可以访问到。
-     * 默认值：[".route.js", ".hjs"]
+     * 允许被作为RequestHandler，执行其中代码的文件的匹配规则。
+     * 只有一个文件的**相对于prefix的路径**与该规则匹配时，才会将其require进来，并将其中的default导出的函数作为RequestHandler，执行其代码。
+     * **请注意：在默认情况下，只有以.route.js或.hjs结尾的文件才会被执行代码！一般的js只会被作为静态文件分发！**
+     * 您可以通过将此项配置为["*.js"]来使得任意js文件都被作为RequestHandler，但这样就不会向前端分发js文件资源了。
+     * 如果您同时在此服务器下部署静态文件服务和动态后端，建议您考虑使用下方的DirectoryConfig，为不同文件夹配置独立的exec配置，目录级别配置优先于这里的实例级别配置。
+     * 默认值：["*.route.js", "*.hjs"]
      */
-    exec_suffix?: string[]
-
-    /**
-     * 作为静态文件分发时，允许隐式推断的文件后缀。
-     * 与这里定义的后缀匹配的文件是不需要与请求URL完全匹配就可以被serve的，例如若定义infer_suffix为[".html"]，假设存在b.html文件，则URL为/b、/b.html时都可以访问到该文件。
-     * static_suffix的优先级总是低于exec_suffix。
-     * 默认值：[]
-     */
-    static_suffix?: string[]
+    exec?: Matcher
 
     /**
      * 除外规则。
@@ -35,18 +31,34 @@ export interface Config {
     exclude?: Matcher
 
     /**
-     * 当用户请求访问的是一个目录时，按照此选项定义的顺序，查找文件进行serve。
+     * 当用户访问不带后缀的URL时，允许隐式推断的文件后缀。
+     * 当用户访问一个URL时，会将URL拼接上这个后缀，尝试查找文件进行serve。
      * 不支持使用*进行通配匹配，也不支持正则。
-     * 默认值：["index.route.js", "index.html", "index.js"]
+     * 注意此配置与index不同，index是在URL请求对应的目录里面查找文件，而此配置是在（去除结尾的/后的）URL末尾直接拼接上该后缀进行查找文件。
+     * 例：在默认配置下，访问/a/b时，文件/a/b.route.js、/a/b.html、/a/b.hjs均是有效匹配，会按照定义的顺序查找文件，若找到再根据exec规则判断是执行代码还是分发静态文件。
+     * 当index和suffix同时存在匹配的文件时，**index配置匹配到的文件的优先级总是高于suffix配置。**
+     * 默认值：[".route.js", ".html", ".hjs"]
+     */
+    suffix?: string[]
+
+    /**
+     * 当用户请求访问的是一个目录时，按照此选项定义的顺序，在目录内查找文件进行serve。
+     * 不支持使用*进行通配匹配，也不支持正则。
+     * 注意此配置与suffix不同，suffix是在（去除结尾的/后的）URL末尾直接拼接上suffix后缀进行匹配文件，而此配置是在URL请求对应的目录里面查找文件。
+     * 例：在默认配置下，访问/a/b时，文件/a/b/index.route.js、/a/b/index.html、/a/b/index.hjs均是有效匹配，会按照定义的顺序查找文件，若找到再根据exec规则判断是执行代码还是分发静态文件。
+     * 当index和suffix同时存在匹配的文件时，**index配置匹配到的文件的优先级总是高于suffix配置。**
+     * 默认值：["index.route.js", "index.html", "index.hjs"]
      */
     index?: string[]
 
     /**
-     * logger的最低级别。
-     * 需要从log4js的级别中选择：https://www.npmjs.com/package/log4js
-     * 默认值："info"
+     * 当直接使用URL本身，和根据index、suffix规则均没有查找到匹配的文件时，是否允许将去父目录查找匹配的**exec动态路由文件**。
+     * 注意去父目录查找时，**只会匹配符合exec规则的动态路由文件，不会匹配静态文件**。
+     * 例：当此配置为true、请求URL为/a/b/c/d时，若存在文件/a/b.route.js、且不存在能直接与/a/b/c/d匹配的静态或动态文件、且不存在能直接与/a/b/c匹配的动态文件，
+     * 则允许执行/a/b.route.js中的代码，同时/a/b.route.js里面通过req.url获取到的值会是/c/d。
+     * 默认值：true
      */
-    log_level?: string
+    exec_try_parent_dir?: boolean
 
     /**
      * 对于handler抛出的异常，是否使用logger进行打印和打印的级别。
@@ -55,7 +67,43 @@ export interface Config {
      */
     handler_error_log_level?: string | undefined
 
+    /**
+     * 实验性特性警告：此配置所对应的特性是实验性的，可能随时更改！
+     *
+     * 加载handler时，使用import而不是require（见 http://nodejs.cn/api/esm.html#import-statements）。
+     * 可选值：false（总是使用require）、true（总是使用import）、"when_require_failed"（仅当require失败时才尝试使用import）。
+     * 这样做使得动态加载es module成为可能，但是，也会引入两个巨大的弊端：
+     * 1. 内存泄露。由于目前没有有效的清除Node的ESM加载器的缓存的机制（参见 https://github.com/nodejs/help/issues/2806 , https://github.com/nodejs/help/issues/1399），在发生更新时即使加载了新的文件，旧的对象也无法被释放内存。
+     * 2. 路由文件中凡是通过import导入的其他模块（无论是ESM还是CJS）不会被重新加载。通过require导入的不受影响。
+     *    具体而言：
+     *      i. require时确保依赖重新加载的机制是将整个require.cache清空（配置项clear_require_cache正是控制这一行为的）。
+     *      ii. import时，确保路由文件本身能够重新加载的机制是在文件名后加上形如`?ERD=${Date.now()}`的字符串，通过每次传给import的参数不同，确保import不会直接命中缓存。然而对于路由文件内部import的其他文件，我们无法操作其解析出来的文件名。
+     *      iii. 可以通过自定义加载器钩子（http://nodejs.cn/api/esm.html#loaders）来规避这一弊端。用法：在启动node时加上参数"--experimental-loader node_modules/express-router-dynamic/esm_loader.mjs"。这一ESM加载器实现了对所有的import都附加随机参数。当然，内存泄漏可能也会变得更严重。
+     * 默认值：false
+     */
+    use_esm_import?: boolean | "when_require_failed"
+
+    /**
+     * log4js logger的category名称
+     * 默认值："DynamicRouter"
+     */
+    log4js_category?: string
+
+    /**
+     * log4js logger的logger.level
+     * 需要从log4js的级别中选择：https://www.npmjs.com/package/log4js
+     * 默认值："info"
+     */
+    log4js_level?: string
+
     // 此行以下的配置为进阶配置，如无特殊需求，一般不建议修改。
+
+    /**
+     * 对prefix和extra_watch(如有)进行watch时，传入的options。
+     * 详见chokidar文档： https://www.npmjs.com/package/chokidar
+     * 默认值：{}
+     */
+    chokidar_options?: WatchOptions
 
     /**
      * 动态加载的debounceTail算法的等待时间。单位ms。
@@ -88,46 +136,53 @@ export interface Config {
      * 默认值：[]
      */
     extra_watch?: string[]
-
-    /**
-     * 对prefix和extra_watch(如有)进行watch时，传入的options。
-     * 详见chokidar文档： https://www.npmjs.com/package/chokidar
-     * 默认值：{}
-     */
-    chokidar_options?: WatchOptions
-
-    /**
-     * 实验性特性警告：此配置所对应的特性是实验性的，可能随时更改！
-     *
-     * 加载handler时，使用import而不是require（见 http://nodejs.cn/api/esm.html#import-statements）。
-     * 可选值：false（总是使用require）、true（总是使用import）、"when_require_failed"（仅当require失败时才尝试使用import）。
-     * 这样做使得动态加载es module成为可能，但是，也会引入两个巨大的弊端：
-     * 1. 内存泄露。由于目前没有有效的清除Node的ESM加载器的缓存的机制（参见 https://github.com/nodejs/help/issues/2806 , https://github.com/nodejs/help/issues/1399），在发生更新时即使加载了新的文件，旧的对象也无法被释放内存。
-     * 2. 路由文件中凡是通过import导入的其他模块（无论是ESM还是CJS）不会被重新加载。通过require导入的不受影响。
-     *    具体而言：
-     *      i. require时确保依赖重新加载的机制是将整个require.cache清空（配置项clear_require_cache正是控制这一行为的）。
-     *      ii. import时，确保路由文件本身能够重新加载的机制是在文件名后加上形如`?ERD=${Date.now()}`的字符串，通过每次传给import的参数不同，确保import不会直接命中缓存。然而对于路由文件内部import的其他文件，我们无法操作其解析出来的文件名。
-     *      iii. 可以通过自定义加载器钩子（http://nodejs.cn/api/esm.html#loaders）来规避这一弊端。用法：在启动node时加上参数"--experimental-loader node_modules/express-router-dynamic/esm_loader.mjs"。这一ESM加载器实现了对所有的import都附加随机参数。当然，内存泄漏可能也会变得更严重。
-     * 默认值：false
-     */
-    use_esm_import?: boolean | "when_require_failed"
 }
 
 export const defaultConfig: Partial<Config> = {
-    exec_suffix: [".route.js", ".hjs"],
-    static_suffix: [],
+    exec: ["*.route.js", "*.hjs"],
     exclude: ["*.ts", "*.js.map"],
-    index: ["index.route.js", "index.html", "index.js"],
-    log_level: "info",
+    suffix: [".route.js", ".html", ".hjs"],
+    index: ["index.route.js", "index.html", "index.hjs"],
+    exec_try_parent_dir: true,
     handler_error_log_level: undefined,
+    use_esm_import: false,
+    log4js_category: "DynamicRouter",
+    log4js_level: "info",
+    chokidar_options: {},
     debounceWait: 1000,
     load_on_demand: true,
     clear_require_cache: true,
     force_full_reload: false,
     extra_watch: [],
-    chokidar_options: {},
-    use_esm_import: false
 }
+
+type DirectoryConfigSharedProperties = "exec" | "exclude" | "suffix" | "index" | "exec_try_parent_dir" |
+    "handler_error_log_level" | "use_esm_import" | "load_on_demand" | "clear_require_cache"
+export const _DirectoryConfigSharedProperties = ["exec", "exclude", "suffix", "index", "exec_try_parent_dir", "handler_error_log_level", "use_esm_import", "load_on_demand", "clear_require_cache"]
+
+/**
+ * 可以对prefix下每个目录分别进行的配置，配置方式是在这个目录下放置一个名为`__config.js__`的文件。
+ * 其中，上方DirectoryConfigSharedProperties中声明的那些属性是DirectoryConfig中也可以使用的实例级别属性，其含义同上方Config所述、默认值同当前的实例级别配置。
+ */
+export interface DirectoryConfig extends Pick<Config, DirectoryConfigSharedProperties> {
+    /**
+     * 是否允许从父级目录继承配置。
+     * 若为false，则不会尝试从任何父级目录继承配置，无论父级目录的propagateIntoChildren为何值。
+     * 这个属性永远不会从父级继承、也永远不会传播到子级。
+     * 默认值：true
+     */
+    inheritFromParent?: boolean
+
+    /**
+     * 是否允许子级目录从这里继承配置。
+     * 若为false，则不会将配置传播到任何子级目录，无论子级目录的inheritFromParent为何值。
+     * 这个属性永远不会从父级继承、也永远不会传播到子级。
+     * 默认值：true
+     */
+    propagateIntoChildren?: boolean
+}
+
+export const defaultDirectoryConfig: Partial<DirectoryConfig> = {}
 
 export function mergeConfig<T>(config: T, defaultConfig: Partial<T>): T {
     for (let key in defaultConfig) {

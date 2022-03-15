@@ -22,3 +22,10 @@ export interface Hooks {
 }
 
 export const hookNames = ["onDestroy"]
+
+/**
+ * Remove Leading Slash
+ */
+export function RLS(s: string): string {
+    return s.startsWith("/") ? s.substring(1) : s
+}
