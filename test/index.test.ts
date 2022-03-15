@@ -1,11 +1,12 @@
 import {describe, it} from "mocha"
 import {createApp, destroyApp, fscp, fsrm, setupLog4jsConfig} from "./testUtils";
 import {DynamicRouter} from "../src";
-import fsp from "fs/promises";
+import {promises as fsp} from "fs";
 import path from "path";
 import {expect} from "chai";
 import {expectEvent} from "./log4jsAppender";
 import _ from "lodash";
+import delay from "delay";
 
 setupLog4jsConfig()
 
@@ -391,12 +392,16 @@ describe('File Watching', function () {
     });
 
     it('should reload dependency', async function () {
-        await fscp("./test/testRoute/lib.js", path.join(tempDir, "lib.js"))
+        await Promise.all([
+            fscp("./test/testRoute/file_watching/hasDependency.route.js", path.join(tempDir, "route", "e/hasDependency.route.js")),
+            fscp("./test/testRoute/lib.js", path.join(tempDir, "lib.js")),
+            delay(1500)
+        ])
         let {data} = await axios.get("/e/hasDependency")
         expect(data).property("test").equal("/e/hasDependency")
         expect(data).property("val").equal(1)
         await Promise.all([
-            fscp("./test/testRoute/file_watching/e/hasDependency.route.js", path.join(tempDir, "route", "e/hasDependency.route.js")),
+            fscp("./test/testRoute/file_watching/hasDependency.route.js", path.join(tempDir, "route", "e/hasDependency.route.js")),
             fscp("./test/testRoute/lib2.js", path.join(tempDir, "lib.js")),
             expectEvent({level: "info", data: /^Removed handler .*e\/hasDependency\.route\.js$/}, 2000)
         ]);
@@ -566,6 +571,7 @@ describe('ESModule Support', function () {
         });
 
         it('should serve async esm', async function () {
+            if (Number(process.versions.node.split(".")[0]) < 14) this.skip() // Since Node v14 async ESModule is supported
             const {data} = await axios.get("/async-esm")
             expect(data).property("test").equal("/async-esm")
         });
@@ -597,6 +603,7 @@ describe('ESModule Support', function () {
         });
 
         it('should serve async esm', async function () {
+            if (Number(process.versions.node.split(".")[0]) < 14) this.skip()
             const {data} = await axios.get("/async-esm")
             expect(data).property("test").equal("/async-esm")
         });

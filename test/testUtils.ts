@@ -1,7 +1,7 @@
 import express, {Express} from "express";
 import axios, {AxiosInstance} from "axios"
 import {AddressInfo} from "net";
-import fsp from "fs/promises";
+import {promises as fsp} from "fs";
 import path from "path";
 import os from "os";
 import http from "http";

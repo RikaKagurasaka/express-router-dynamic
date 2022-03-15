@@ -1,4 +1,4 @@
-import fsp from "fs/promises";
+import {promises as fsp} from "fs";
 import {Request} from "express";
 import URL from "url-parse";
 
