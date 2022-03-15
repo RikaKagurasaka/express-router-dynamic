@@ -143,7 +143,8 @@ export class DynamicRouter {
         })))
 
         // 排除exclude的文件
-        toTryPaths = toTryPaths.filter(({path, config}) => !anymatch(config.exclude, RLS(path), {basename: true}))
+        toTryPaths = toTryPaths.filter(({path, config}) => !anymatch(config.exclude, RLS(path), {basename: true})
+            && !(this.config.exclude_node_modules && path.includes("/node_modules/")))
 
         for (const {path, rela, config} of toTryPaths) {
             try {
@@ -202,6 +203,11 @@ export class DynamicRouter {
 
     private async _onFileChanged(event: string, filename: string, extra_watch = false) {
         filename = path.resolve(filename)
+        if (this.config.exclude_node_modules && filename.includes(path.sep + "node_modules" + path.sep)) {
+            // 如果是node_modules，则删一下缓存直接返回，不打log
+            delete require.cache[filename]
+            return
+        }
         this.logger.debug(`Chokidar: ${event}: ${filename}`)
         if ((event === "add" || event === "change" || event === "unlink")) {
             this.nofile_cache.delete(filename)
@@ -288,8 +294,7 @@ export class DynamicRouter {
             if (filename.endsWith("__config__.json")) {
                 delete require.cache[filename]
                 config = require(filename)
-            }
-            else {
+            } else {
                 config = await import(`${filename}?ERD=${Date.now()}`)
                 config = config.default || config
             }

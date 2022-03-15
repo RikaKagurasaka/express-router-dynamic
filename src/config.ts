@@ -106,6 +106,12 @@ export interface Config {
     chokidar_options?: WatchOptions
 
     /**
+     * 忽略node_modules。
+     * 默认值：true
+     */
+    exclude_node_modules?: boolean
+
+    /**
      * 动态加载的debounceTail算法的等待时间。单位ms。
      * 默认值：1000。
      */
@@ -149,6 +155,7 @@ export const defaultConfig: Partial<Config> = {
     log4js_category: "DynamicRouter",
     log4js_level: "info",
     chokidar_options: {},
+    exclude_node_modules: true,
     debounceWait: 1000,
     load_on_demand: true,
     clear_require_cache: true,
