@@ -1,6 +1,6 @@
 {
   "name": "express-router-dynamic",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Express Router which loads js codes dynamically as well as serves static files, and routes based on directory structure.",
   "main": "bld/index.js",
   "type": "commonjs",
@@ -20,7 +20,8 @@
     "url-parse": "^1.5.10"
   },
   "peerDependencies": {
-    "express": "*"
+    "express": "*",
+    "log4js": ">=2.0.0"
   },
   "devDependencies": {
     "@types/chai": "^4.3.0",

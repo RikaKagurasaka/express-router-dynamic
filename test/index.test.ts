@@ -260,7 +260,7 @@ describe('File Watching', function () {
         ])
         await Promise.all([
             fsp.appendFile(path.join(tempDir, "route", "test-watch-file.txt"), _.range(100).toString()),
-            expectEvent({level: "debug", data: /^Chokidar: change: .*test-watch-file\.txt$/})
+            expectEvent({level: "debug", data: /^Chokidar: change: .*test-watch-file\.txt$/}, 1500)
         ])
     });
 
