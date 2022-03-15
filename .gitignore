@@ -2,7 +2,7 @@
 /.idea/
 /src/**/*.js
 /src/**/*.map
-/test/**/*.js
-/test/**/*.map
+/test/*.js
+/test/*.map
 /test-local/
 /bld/

@@ -1,0 +1,9 @@
+const {delay} = require("./delay");
+
+exports.default = async function (req, res, next) {
+    await delay(1000)
+    res.json({
+        test: "/async-dynamic",
+        url: req.url
+    })
+}
