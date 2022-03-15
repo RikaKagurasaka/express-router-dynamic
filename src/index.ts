@@ -54,7 +54,7 @@ export class DynamicRouter {
             await watcher.close()
         }
         this._destroyed = true
-        this.logger.info(`DynamicRouter @ ${this.config.prefix} is destroyed.`)
+        this.logger.info(`DynamicRouter @ ${this.config.webroot} is destroyed.`)
     }
 
     onDestroy = this.destroy
@@ -75,13 +75,13 @@ export class DynamicRouter {
         if (this.config.use_esm_import !== false) this.logger.warn(`ExperimentalWarning: use_esm_import is an experimental feature. This feature could change at any time`)
         const that = bindSelf(this.__call__)
 
-        this.serve_static = serveStatic(this.config.prefix, {index: false, redirect: false})
+        this.serve_static = serveStatic(this.config.webroot, {index: false, redirect: false})
         this._debouncedUpdateHandlers = debounce(this._updateHandlers.bind(that), this.config.debounceWait)
 
-        this.watcher = chokidar.watch(this.config.prefix, mergeConfig(this.config.chokidar_options, {cwd: "."}))
+        this.watcher = chokidar.watch(this.config.webroot, mergeConfig(this.config.chokidar_options, {cwd: "."}))
         this.watcher.on("all", (event, filename) => this._onFileChanged.call(that, event, filename, false))
         this.watcher.on("error", (e) => this.logger.error(`Chokidar: error:`, e))
-        this.watcher.on("ready", () => this.logger.info(`Start watching ${this.config.prefix}`))
+        this.watcher.on("ready", () => this.logger.info(`Start watching ${this.config.webroot}`))
 
         for (const p of this.config.extra_watch) {
             const watcher = chokidar.watch(p, mergeConfig(this.config.chokidar_options, {
@@ -99,7 +99,7 @@ export class DynamicRouter {
 
     private async __call__(req: Request, res: Response, next: NextFunction) {
         if (this._destroyed) {
-            this.logger.error(`DynamicRouter on ${this.config.prefix} had been destroyed, cannot process request!`)
+            this.logger.error(`DynamicRouter on ${this.config.webroot} had been destroyed, cannot process request!`)
             next(new Error("DynamicRouter had been destroyed!"))
         }
         if (!this._initialized) {
@@ -113,10 +113,10 @@ export class DynamicRouter {
         reqSetPath(req, processed_path)
 
         // 对每个URL，尝试匹配若干个文件
-        const dirConfig = this._getDirConfig(path.join(this.config.prefix, RLS(req.path)))
+        const dirConfig = this._getDirConfig(path.join(this.config.webroot, RLS(req.path)))
         let toTryPaths = [{path: req.path, rela: "/", config: dirConfig}] // 最高优先级：path本身
         // 次高优先级：path作为目录，其下的index文件
-        const indexDirConfig = this._getDirConfig(path.join(this.config.prefix, RLS(req.path), "index"))
+        const indexDirConfig = this._getDirConfig(path.join(this.config.webroot, RLS(req.path), "index"))
         toTryPaths = toTryPaths.concat(indexDirConfig.index.map(v => ({
             path: path.join(req.path, v),
             rela: "/",
@@ -125,7 +125,7 @@ export class DynamicRouter {
         // 接下来优先级：向上查找直到root，找suffix
         let curPath = req.path.endsWith("/") ? req.path.slice(0, -1) : req.path // 当url末尾是/时应当去掉
         while (curPath.length > 1) {
-            const config = this._getDirConfig(path.join(this.config.prefix, RLS(curPath)))
+            const config = this._getDirConfig(path.join(this.config.webroot, RLS(curPath)))
             toTryPaths = toTryPaths.concat(config.suffix.map(s => ({
                 path: curPath + s,
                 rela: "/" + path.relative(curPath, req.path),
@@ -135,7 +135,7 @@ export class DynamicRouter {
             curPath = path.dirname(curPath)
         }
         // 最后一个优先级：/__default__${suffix}
-        const rootConfig = this._getDirConfig(path.join(this.config.prefix, "__default__"))
+        const rootConfig = this._getDirConfig(path.join(this.config.webroot, "__default__"))
         toTryPaths = toTryPaths.concat(rootConfig.suffix.map(s => ({
             path: "/__default__" + s,
             rela: req.path,
@@ -158,7 +158,7 @@ export class DynamicRouter {
     }
 
     private async _tryFile(path_: string, config: DirectoryConfig, rela: string, req: Request, res: Response, next: NextFunction): Promise<boolean> {
-        const filename = path.resolve(path.join(this.config.prefix, RLS(path_)))
+        const filename = path.resolve(path.join(this.config.webroot, RLS(path_)))
         if (this._canExec(filename, config)) {
             if (path_.endsWith("/")) return false
             if (!this.handlers[filename]) {
@@ -193,7 +193,7 @@ export class DynamicRouter {
     }
 
     private _canExec(filename: string, config: DirectoryConfig): boolean {
-        return anymatch(config.exec, path.relative(this.config.prefix, filename), {basename: true})
+        return anymatch(config.exec, path.relative(this.config.webroot, filename), {basename: true})
     }
 
     private static _isConfigFile(filename: string): boolean {
@@ -256,7 +256,7 @@ export class DynamicRouter {
         if (!this._initialized) {
             this._initialized = true
             this._initializedPromiseResolver()
-            this.logger.info(`DynamicRouter @ ${this.config.prefix} initialization finished!`)
+            this.logger.info(`DynamicRouter @ ${this.config.webroot} initialization finished!`)
         }
         this.logger.debug("_updateHandlers finished")
     }
@@ -264,7 +264,7 @@ export class DynamicRouter {
     private async _updateHandler(filename: string, shouldReload: boolean, verbose = true) {
         let verb, hooks = []
         const config = this._getDirConfig(filename)
-        const relaPath = path.relative(this.config.prefix, filename)
+        const relaPath = path.relative(this.config.webroot, filename)
         if (this.handlers[filename]) {
             this._invokeHookFn(filename, "onDestroy")
             delete this.handlers[filename]
@@ -311,7 +311,7 @@ export class DynamicRouter {
             delete require.cache[filename]
         }
 
-        const relaPath = path.relative(this.config.prefix, filename)
+        const relaPath = path.relative(this.config.webroot, filename)
         let exports
         try {
             if (config.use_esm_import === true) exports = await import(`${filename}?ERD=${Date.now()}`)
@@ -369,12 +369,12 @@ export class DynamicRouter {
 
     private _getDirConfig(filename: string): DirectoryConfig {
         filename = path.dirname(path.resolve(filename))
-        const rela = path.relative(this.config.prefix, filename)
-        if (!rela || rela.startsWith("..")) filename = this.config.prefix // 防止配置查找越出webroot
+        const rela = path.relative(this.config.webroot, filename)
+        if (!rela || rela.startsWith("..")) filename = this.config.webroot // 防止配置查找越出webroot
         const initialConfig: DirectoryConfig = this.dirConfigs[filename] || {}
         const result = _.clone(initialConfig)
         if (initialConfig.inheritFromParent !== false) {
-            while (path.relative(this.config.prefix, filename)) {
+            while (path.relative(this.config.webroot, filename)) {
                 filename = path.dirname(filename)
                 const config = this.dirConfigs[filename]
                 if (config && config.propagateIntoChildren !== false) mergeConfig(result, config)

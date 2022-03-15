@@ -10,11 +10,11 @@ export interface Config {
      * 凡在这一目录下的文件都会被serve出去：js文件是把其default导出的函数作为RequestHandler执行，其他文件则一律作为静态文件进行分发。
      * 必填
      */
-    prefix: string
+    webroot: string
 
     /**
      * 允许被作为RequestHandler，执行其中代码的文件的匹配规则。
-     * 只有一个文件的**相对于prefix的路径**与该规则匹配时，才会将其require进来，并将其中的default导出的函数作为RequestHandler，执行其代码。
+     * 只有一个文件的**相对于webroot的路径**与该规则匹配时，才会将其require进来，并将其中的default导出的函数作为RequestHandler，执行其代码。
      * **请注意：在默认情况下，只有以.route.js或.hjs结尾的文件才会被执行代码！一般的js只会被作为静态文件分发！**
      * 您可以通过将此项配置为["*.js"]来使得任意js文件都被作为RequestHandler，但这样就不会向前端分发js文件资源了。
      * 如果您同时在此服务器下部署静态文件服务和动态后端，建议您考虑使用下方的DirectoryConfig，为不同文件夹配置独立的exec配置，目录级别配置优先于这里的实例级别配置。
@@ -24,7 +24,7 @@ export interface Config {
 
     /**
      * 除外规则。
-     * 当一个文件的**相对于prefix的路径**与除外规则匹配时，这个文件不会被serve，无论是执行代码还是静态文件分发。
+     * 当一个文件的**相对于webroot的路径**与除外规则匹配时，这个文件不会被serve，无论是执行代码还是静态文件分发。
      * 接受可以含通配符的字符串、正则、函数等等，使用anymatch进行匹配，详见 https://www.npmjs.com/package/anymatch
      * 默认值：["*.ts", "*.js.map"]
      */
@@ -99,7 +99,7 @@ export interface Config {
     // 此行以下的配置为进阶配置，如无特殊需求，一般不建议修改。
 
     /**
-     * 对prefix和extra_watch(如有)进行watch时，传入的options。
+     * 对webroot和extra_watch(如有)进行watch时，传入的options。
      * 详见chokidar文档： https://www.npmjs.com/package/chokidar
      * 默认值：{}
      */
@@ -118,13 +118,13 @@ export interface Config {
     load_on_demand?: boolean
 
     /**
-     * 当有任何prefix中的js文件发生变动时，是否通过清空require.cache来确保它所require的其他所有文件也能被重新加载。
+     * 当有任何webroot中的js文件发生变动时，是否通过清空require.cache来确保它所require的其他所有文件也能被重新加载。
      * 默认值：true
      */
     clear_require_cache?: boolean
 
     /**
-     * 每当有任何prefix中的js文件发生变动，就丢弃所有已经加载的RequestHandler对象（相当于视为所有文件都发生了变更）。通常不建议使用。
+     * 每当有任何webroot中的js文件发生变动，就丢弃所有已经加载的RequestHandler对象（相当于视为所有文件都发生了变更）。通常不建议使用。
      * 注：如果load_on_demand为true，则只是所有的已加载的RequestHandler都会立即销毁、不会再调用，但并不会立即重新加载。
      * 默认值：false
      */
@@ -161,7 +161,7 @@ type DirectoryConfigSharedProperties = "exec" | "exclude" | "suffix" | "index" |
 export const _DirectoryConfigSharedProperties = ["exec", "exclude", "suffix", "index", "exec_try_parent_dir", "handler_error_log_level", "use_esm_import", "load_on_demand", "clear_require_cache"]
 
 /**
- * 可以对prefix下每个目录分别进行的配置，配置方式是在这个目录下放置一个名为`__config.js__`的文件。
+ * 可以对webroot下每个目录分别进行的配置，配置方式是在这个目录下放置一个名为`__config.js__`的文件。
  * 其中，上方DirectoryConfigSharedProperties中声明的那些属性是DirectoryConfig中也可以使用的实例级别属性，其含义同上方Config所述、默认值同当前的实例级别配置。
  */
 export interface DirectoryConfig extends Pick<Config, DirectoryConfigSharedProperties> {

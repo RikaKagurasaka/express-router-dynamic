@@ -20,7 +20,7 @@ describe('Core', function () {
     before(async () => {
         ({app, server, axios, tempDir, port} = await createApp())
         await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
-        router = new DynamicRouter({prefix: path.join(tempDir, "route")})
+        router = new DynamicRouter({webroot: path.join(tempDir, "route")})
         app.use(router)
     })
 
@@ -176,7 +176,7 @@ describe('Directory Config', function () {
     before(async () => {
         ({app, server, axios, tempDir, port} = await createApp())
         await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
-        router = new DynamicRouter({prefix: path.join(tempDir, "route")})
+        router = new DynamicRouter({webroot: path.join(tempDir, "route")})
         app.use(router)
     })
 
@@ -238,7 +238,7 @@ describe('File Watching', function () {
     before(async () => {
         ({app, server, axios, tempDir, port} = await createApp())
         await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
-        router = new DynamicRouter({prefix: path.join(tempDir, "route"), log4js_level: "debug"})
+        router = new DynamicRouter({webroot: path.join(tempDir, "route"), log4js_level: "debug"})
         app.use(router)
     })
 
@@ -252,7 +252,7 @@ describe('File Watching', function () {
         expect(status).equal(404);
     });
 
-    it('should watch file event in prefix', async function () {
+    it('should watch file event in webroot', async function () {
         await Promise.all([
             fscp("./test/testRoute/file_watching/test-watch-file.txt", path.join(tempDir, "route", "test-watch-file.txt")),
             expectEvent({level: "debug", data: /^Chokidar: add: .*test-watch-file\.txt$/})
@@ -263,7 +263,7 @@ describe('File Watching', function () {
         ])
     });
 
-    it('should watch dir and file event in prefix', async function () {
+    it('should watch dir and file event in webroot', async function () {
         await Promise.all([
             fscp("./test/testRoute/file_watching/e", path.join(tempDir, "route", "e"), {recursive: true}),
             expectEvent({level: "debug", data: /^Chokidar: addDir: .*e$/}),
@@ -321,7 +321,7 @@ describe('File Watching', function () {
             ({app, server, axios, tempDir, port} = await createApp())
             await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
             router = new DynamicRouter({
-                prefix: path.join(tempDir, "route"),
+                webroot: path.join(tempDir, "route"),
                 log4js_level: "debug",
                 load_on_demand: false
             })
@@ -412,7 +412,7 @@ describe('File Watching', function () {
             ({app, server, axios, tempDir, port} = await createApp())
             await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
             router = new DynamicRouter({
-                prefix: path.join(tempDir, "route"),
+                webroot: path.join(tempDir, "route"),
                 log4js_level: "debug"
             })
             app.use(router)
@@ -468,7 +468,7 @@ describe('File Watching', function () {
             ({app, server, axios, tempDir, port} = await createApp())
             await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
             router = new DynamicRouter({
-                prefix: path.join(tempDir, "route"),
+                webroot: path.join(tempDir, "route"),
                 log4js_level: "debug",
                 use_esm_import: true,
                 exec: ["*.route.js", "*.route.mjs"],
@@ -506,7 +506,7 @@ describe('Security', function () {
         await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
         await fscp("./test/testRoute/core/dynamic.route.js", path.join(tempDir, "dynamicB.route.js"))
         await fscp("./test/testRoute/core/suffix.html", path.join(tempDir, "suffixB.html"))
-        router = new DynamicRouter({prefix: path.join(tempDir, "route"), exclude: ["*.hjs", "*.json"]})
+        router = new DynamicRouter({webroot: path.join(tempDir, "route"), exclude: ["*.hjs", "*.json"]})
         app.use(router)
     })
 
@@ -547,7 +547,7 @@ describe('ESModule Support', function () {
             ({app, server, axios, tempDir, port} = await createApp())
             await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
             router = new DynamicRouter({
-                prefix: path.join(tempDir, "route"),
+                webroot: path.join(tempDir, "route"),
                 use_esm_import: true,
                 exec: ["*.route.js", "*.route.mjs"],
                 suffix: [".route.js", ".route.mjs"]
@@ -578,7 +578,7 @@ describe('ESModule Support', function () {
             ({app, server, axios, tempDir, port} = await createApp())
             await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
             router = new DynamicRouter({
-                prefix: path.join(tempDir, "route"),
+                webroot: path.join(tempDir, "route"),
                 use_esm_import: "when_require_failed",
                 exec: ["*.route.js", "*.route.mjs"],
                 suffix: [".route.js", ".route.mjs"]
