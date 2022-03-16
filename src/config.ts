@@ -120,6 +120,12 @@ export interface Config {
     debounceWait?: number
 
     /**
+     * 若此项为true，则当进程收到SIGUSR2时，强制DynamicRouter重新加载所有handler(full_reload)。
+     * 默认值：false
+     */
+    reload_on_SIGUSR2?: boolean
+
+    /**
      * 文件修改后不立即加载，而是当被首次请求时才加载。
      * 默认值：true
      */
@@ -159,6 +165,7 @@ export const defaultConfig: Partial<Config> = {
     chokidar_options: {},
     exclude_node_modules: true,
     debounceWait: 1000,
+    reload_on_SIGUSR2: false,
     load_on_demand: true,
     clear_require_cache: true,
     force_full_reload: false,

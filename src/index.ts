@@ -93,6 +93,13 @@ export class DynamicRouter {
             this.extra_watchers.push(watcher)
         }
 
+        if (this.config.reload_on_SIGUSR2) process.on("SIGUSR2", () => {
+            if (this.config.reload_on_SIGUSR2) {
+                this.logger.warn("Received SIGUSR2")
+                this._fullReload();
+            }
+        })
+
         return extendPrototype(that, this)
     }
 
@@ -229,7 +236,7 @@ export class DynamicRouter {
     private async _updateHandlers() {
         await this.lock.acquireAsync()
         try {
-            let queue: [string, boolean][] = _.toPairs(this.debounceQueue) // 三个元素顺序：文件名、是否需要load、文件可执行性
+            let queue: [string, boolean][] = _.toPairs(this.debounceQueue) // 两个元素顺序：文件名、是否需要load
             for (const k in this.debounceQueue) {
                 delete this.debounceQueue[k]
             }
@@ -244,19 +251,13 @@ export class DynamicRouter {
             canExec = _.zip(canExec, queue).map(([c, [k]]) => c || this._canExec(k, this._getDirConfig(k)))
             queue = queue.filter((_, i) => canExec[i])
             if (queue.length > 0) {
-                this.shouldClearCache = true
                 if (!this.config.force_full_reload) { // 只更新队列中的
+                    this.shouldClearCache = true
                     for (const [k, b] of queue) {
                         await this._updateHandler(k, b)
                     }
                 } else { // 移除现在所有的
-                    const queueObj = _.fromPairs(queue.map(([k, b]) => ([k, b])))
-                    const toUpdates = new Set(queue.map(([k]) => (k)).concat(_.keys(this.handlers)))
-                    for (const k of toUpdates) {
-                        await this._updateHandler(k, queueObj[k] !== false, false)
-                    }
-                    if (!this.config.load_on_demand) this.logger.info(`All handlers reloaded!`)
-                    else this.logger.info(`All handlers removed!`)
+                    await this._fullReload(_.fromPairs(queue))
                 }
             }
         } finally {
@@ -306,6 +307,15 @@ export class DynamicRouter {
         } catch (e) {
             this.logger.error(`Failed to Load Directory Config: ${filename}`, e)
         }
+    }
+
+    private async _fullReload(extraQueue: Dict<boolean> = {}) {
+        this.shouldClearCache = true
+        const toUpdates = new Set(_.keys(extraQueue).concat(_.keys(this.handlers)))
+        for (const k of toUpdates) {
+            await this._updateHandler(k, extraQueue[k] !== false, false)
+        }
+        this.logger.info(`All Handlers Removed or Reloaded!`)
     }
 
     private async _loadHandler(filename: string, config: DirectoryConfig, verbose = true): Promise<{ hooks: string[] }> {
