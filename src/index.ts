@@ -58,6 +58,45 @@ export class DynamicRouter {
 
     onDestroy = this.destroy
 
+    /**
+     * 把相对于webroot的路径转为绝对路径。
+     * @param relativePath 相对于webroot的路径（开头若有/也没关系，会被忽略）
+     */
+    getAbsFilename(relativePath: string): string {
+        return path.resolve(path.join(this.config.webroot, RLS(relativePath)))
+    }
+
+    /**
+     * 根据路径获得handler对象。
+     * @param relativePath 相对于webroot的路径（开头若有/也没关系，会被忽略）
+     * @param shouldLoad 如果该路径对应的文件存在但是还没有被加载，则是否应该立刻予以加载再返回。
+     * @return undefined | any 若存在，返回当前在该路径上的handler对象；否则，返回undefined
+     */
+    async getHandler(relativePath: string, shouldLoad = true): Promise<undefined | any> {
+        const filename = this.getAbsFilename(relativePath)
+        let result = this.handlers[filename].handler
+        if (result) return result
+        const config = this._getDirConfig(filename)
+        const existed = await this._tryLoadHandler(filename, config)
+        if (existed) return this.handlers[filename].handler
+        else return undefined
+    }
+
+    /**
+     * getHandler的别名
+     */
+    $ = this.getHandler
+
+    /**
+     * 同步的根据路径获得handler对象。
+     * 因为是同步的，该函数无法在路径对应的文件存在但是还没有被加载的情况下直接进行加载，而是会返回undefined。
+     * @param relativePath 相对于webroot的路径（开头若有/也没关系，会被忽略）
+     * @return undefined | any 若存在，返回当前在该路径上的handler对象；否则，返回undefined
+     */
+    getHandlerSync(relativePath: string): undefined | any {
+        return this.handlers[this.getAbsFilename(relativePath)].handler
+    }
+
     private _initialized = false
     private _destroyed = false
     private _initializedPromiseResolver: () => void
@@ -119,10 +158,10 @@ export class DynamicRouter {
         reqSetPath(req, processed_path)
 
         // 对每个URL，尝试匹配若干个文件
-        const dirConfig = this._getDirConfig(path.join(this.config.webroot, RLS(req.path)))
+        const dirConfig = this._getDirConfig(this.getAbsFilename(req.path))
         let toTryPaths = [{path: req.path, rela: "/", config: dirConfig}] // 最高优先级：path本身
         // 次高优先级：path作为目录，其下的index文件
-        const indexDirConfig = this._getDirConfig(path.join(this.config.webroot, RLS(req.path), "index"))
+        const indexDirConfig = this._getDirConfig(path.join(this.getAbsFilename(req.path), "index"))
         toTryPaths = toTryPaths.concat(indexDirConfig.index.map(v => ({
             path: path.join(req.path, v),
             rela: "/",
@@ -131,7 +170,7 @@ export class DynamicRouter {
         // 接下来优先级：向上查找直到root，找suffix
         let curPath = req.path.endsWith("/") ? req.path.slice(0, -1) : req.path // 当url末尾是/时应当去掉
         while (curPath.length > 1) {
-            const config = this._getDirConfig(path.join(this.config.webroot, RLS(curPath)))
+            const config = this._getDirConfig(this.getAbsFilename(curPath))
             toTryPaths = toTryPaths.concat(config.suffix.map(s => ({
                 path: curPath + s,
                 rela: "/" + path.relative(curPath, req.path),
@@ -165,23 +204,11 @@ export class DynamicRouter {
     }
 
     private async _tryFile(path_: string, config: DirectoryConfig, rela: string, req: Request, res: Response, next: NextFunction): Promise<boolean> {
-        const filename = path.resolve(path.join(this.config.webroot, RLS(path_)))
+        const filename = this.getAbsFilename(path_)
         if (this._canExec(filename, config)) {
             if (path_.endsWith("/")) return false
-            if (!this.handlers[filename]) {
-                // 先检查存不存在，不存在就记录下来，存在就加入缓存
-                if (this.nofile_cache.has(filename)) return false
-                if (!(await existsAsync(filename))) {
-                    this.nofile_cache.add(filename)
-                    return false
-                }
-                await this.lock.acquireAsync()
-                try {
-                    await this._loadHandler(filename, config)
-                } finally {
-                    this.lock.release()
-                }
-            }
+            const existed = await this._tryLoadHandler(filename, config)
+            if (!existed) return false
             reqSetPath(req, rela)
             // @ts-ignore
             req.$router = this;
@@ -201,6 +228,24 @@ export class DynamicRouter {
             await new Promise((resolve, reject) => this.serve_static(req, res, (err) => err ? reject(err) : resolve()))
             return false
         }
+    }
+
+    private async _tryLoadHandler(filename: string, config: DirectoryConfig): Promise<boolean> {
+        if (!this.handlers[filename]) {
+            // 先检查文件存不存在，不存在就记录下来，存在就加入缓存
+            if (this.nofile_cache.has(filename)) return false
+            if (!(await existsAsync(filename))) {
+                this.nofile_cache.add(filename)
+                return false
+            }
+            await this.lock.acquireAsync()
+            try {
+                await this._loadHandler(filename, config)
+            } finally {
+                this.lock.release()
+            }
+        }
+        return true
     }
 
     private _canExec(filename: string, config: DirectoryConfig): boolean {
