@@ -1,4 +1,4 @@
-import {Matcher} from "anymatch"
+import {Matcher} from "./utils"
 import {WatchOptions} from "chokidar";
 
 /**
@@ -18,6 +18,8 @@ export interface Config {
      * **请注意：在默认情况下，只有以.route.js或.hjs结尾的文件才会被执行代码！一般的js只会被作为静态文件分发！**
      * 您可以通过将此项配置为["*.js"]来使得任意js文件都被作为RequestHandler，但这样就不会向前端分发js文件资源了。
      * 如果您同时在此服务器下部署静态文件服务和动态后端，建议您考虑使用下方的DirectoryConfig，为不同文件夹配置独立的exec配置，目录级别配置优先于这里的实例级别配置。
+     *
+     * 接受glob字符串、正则、函数，详见utils.d.ts中Matcher的类型定义；glob字符串使用minimatch进行匹配，详见 https://www.npmjs.com/package/minimatch
      * 默认值：["*.route.js", "*.hjs"]
      */
     exec?: Matcher
@@ -25,7 +27,7 @@ export interface Config {
     /**
      * 除外规则。
      * 当一个文件的**相对于webroot的路径**与除外规则匹配时，这个文件不会被serve，无论是执行代码还是静态文件分发。
-     * 接受可以含通配符的字符串、正则、函数等等，使用anymatch进行匹配，详见 https://www.npmjs.com/package/anymatch
+     * 接受glob字符串、正则、函数，详见utils.d.ts中Matcher的类型定义；glob字符串使用minimatch进行匹配，详见 https://www.npmjs.com/package/minimatch
      * 默认值：["*.ts", "*.js.map"]
      */
     exclude?: Matcher

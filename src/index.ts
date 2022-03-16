@@ -13,9 +13,8 @@ import _, {debounce} from "lodash";
 import log4js, {Logger} from "@log4js-node/log4js-api";
 import chokidar, {FSWatcher} from "chokidar"
 import serveStatic from "serve-static";
-import anymatch from "anymatch"
 import http from "http";
-import {existsAsync, hookNames, Hooks, Prefix$IsAny, reqSetPath, RLS} from "./utils";
+import {existsAsync, hookNames, Hooks, matchPattern, Prefix$IsAny, reqSetPath, RLS} from "./utils";
 import AwaitLock from "await-lock";
 import Dict = NodeJS.Dict;
 
@@ -143,7 +142,7 @@ export class DynamicRouter {
         })))
 
         // 排除exclude的文件
-        toTryPaths = toTryPaths.filter(({path, config}) => !anymatch(config.exclude, RLS(path), {basename: true})
+        toTryPaths = toTryPaths.filter(({path, config}) => !matchPattern(config.exclude, RLS(path), {matchBase: true})
             && !(this.config.exclude_node_modules && path.includes("/node_modules/")))
 
         for (const {path, rela, config} of toTryPaths) {
@@ -198,7 +197,7 @@ export class DynamicRouter {
     }
 
     private _canExec(filename: string, config: DirectoryConfig): boolean {
-        return anymatch(config.exec, path.relative(this.config.webroot, filename), {basename: true})
+        return matchPattern(config.exec, path.relative(this.config.webroot, filename), {matchBase: true})
     }
 
     private static _isConfigFile(filename: string): boolean {

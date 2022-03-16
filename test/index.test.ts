@@ -258,9 +258,10 @@ describe('File Watching', function () {
             fscp("./test/testRoute/file_watching/test-watch-file.txt", path.join(tempDir, "route", "test-watch-file.txt")),
             expectEvent({level: "debug", data: /^Chokidar: add: .*test-watch-file\.txt$/})
         ])
+        await delay(1000)
         await Promise.all([
             fsp.appendFile(path.join(tempDir, "route", "test-watch-file.txt"), _.range(100).toString()),
-            expectEvent({level: "debug", data: /^Chokidar: change: .*test-watch-file\.txt$/}, 1500)
+            expectEvent({level: "debug", data: /^Chokidar: change: .*test-watch-file\.txt$/}, 1000)
         ])
     });
 

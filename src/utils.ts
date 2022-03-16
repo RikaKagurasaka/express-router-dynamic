@@ -1,6 +1,22 @@
 import {promises as fsp} from "fs";
 import {Request} from "express";
 import URL from "url-parse";
+import minimatch from "minimatch";
+
+type _Matcher = string | RegExp | ((testString: string) => boolean)
+export type Matcher = _Matcher | _Matcher[]
+
+export function matchPattern(matcher: Matcher, testString: string, options: minimatch.IOptions): boolean {
+    if (!Array.isArray(matcher)) matcher = [matcher]
+    for (const ma of matcher) {
+        let result: boolean
+        if (typeof ma === "function") result = ma(testString)
+        else if (ma instanceof RegExp) result = ma.test(testString)
+        else result = minimatch(testString, ma, options)
+        if (result) return true
+    }
+    return false
+}
 
 export async function existsAsync(filename: string): Promise<boolean> {
     try {
@@ -38,7 +54,7 @@ type removePrefix<TPrefixedKey, TPrefix extends string> = TPrefixedKey extends a
     ? TKey
     : '';
 
-type prefixedValue<TObject extends object, TPrefixedKey extends string, TPrefix extends string> = TObject extends {[K in removePrefix<TPrefixedKey, TPrefix>]: infer TValue}
+type prefixedValue<TObject extends object, TPrefixedKey extends string, TPrefix extends string> = TObject extends { [K in removePrefix<TPrefixedKey, TPrefix>]: infer TValue }
     ? TValue
     : never;
 
