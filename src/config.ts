@@ -1,5 +1,6 @@
 import {Matcher} from "./utils"
 import {WatchOptions} from "chokidar";
+import DynamicRouter from "./index";
 
 /**
  * DynamicRouter对象的实例级别配置，在构造new DynamicRouter对象的时候传入。
@@ -171,7 +172,6 @@ export const defaultConfig: Partial<Config> = {
     force_full_reload: false,
     extra_watch: [],
 }
-
 type DirectoryConfigSharedProperties = "exec" | "exclude" | "suffix" | "index" | "exec_try_parent_dir" |
     "handler_error_log_level" | "use_esm_import" | "load_on_demand" | "clear_require_cache"
 export const _DirectoryConfigSharedProperties = ["exec", "exclude", "suffix", "index", "exec_try_parent_dir", "handler_error_log_level", "use_esm_import", "load_on_demand", "clear_require_cache"]
@@ -199,6 +199,41 @@ export interface DirectoryConfig extends Pick<Config, DirectoryConfigSharedPrope
 }
 
 export const defaultDirectoryConfig: Partial<DirectoryConfig> = {}
+
+/**
+ * 对于动态路由(即与exec中规定的pattern匹配的)JS文件，关于如何从文件中获取请求处理函数(RequestHandler):
+ *   1. 使用default导出(exports.default)
+ *   2. 如果第一步得到的不是函数，则使用exports对象
+ *   3. 如果第二步得到的仍然不是函数，则加载失败抛出异常
+ */
+
+/**
+ * 可以在每个动态路由JS文件上定义的钩子。
+ * 定义的方法是：
+ *   1. 将对应名字的函数作为请求处理函数的**子属性**，例：exports.default.onDestroy
+ *   2. 直接将对应名字的函数导出出来，例：exports.onDestroy
+ */
+export interface Hooks {
+    /**
+     * 当文件被导入后执行的钩子。具体而言，执行的时机是require(await import)之后。
+     * 可以是异步函数。若为异步函数，则直到它resolve，该文件才会被认为是加载成功，才会调用其中的请求处理函数。
+     * 如果这个钩子抛出异常（包括异步异常promise reject），则该文件**会被认为加载失败**，请求会直接500。
+     * @this RequestHandler 请求处理函数
+     * @param router 当前的DynamicRouter实例
+     */
+    onCreate?: (router: DynamicRouter) => void | Promise<void> // 在文件被require后异步执行。若要阻止执行，可以让此函数抛异常。
+
+    /**
+     * 当请求处理函数被移除时被导入后执行的钩子。具体而言，执行的时机是require(await import)之后。
+     * 可以是异步函数。若为异步函数，则直到它resolve，该文件才会被认为是加载成功，才会调用其中的请求处理函数。
+     * 如果这个钩子抛出异常（包括异步异常promise reject），则该文件**会被认为加载失败**，请求会直接500。
+     * @this RequestHandler 请求处理函数
+     * @param router 当前的DynamicRouter实例
+     */
+    onDestroy?: (router: DynamicRouter) => void | Promise<void>
+}
+
+export const hookNames = ["onCreate", "onDestroy"]
 
 export function mergeConfig<T>(config: T, defaultConfig: Partial<T>): T {
     for (let key in defaultConfig) {

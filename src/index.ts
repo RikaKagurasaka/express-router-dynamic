@@ -4,6 +4,8 @@ import {
     defaultConfig,
     defaultDirectoryConfig,
     DirectoryConfig,
+    hookNames,
+    Hooks,
     mergeConfig
 } from "./config";
 import {NextFunction, Request, RequestHandler, Response} from "express";
@@ -14,7 +16,7 @@ import log4js, {Logger} from "@log4js-node/log4js-api";
 import chokidar, {FSWatcher} from "chokidar"
 import serveStatic from "serve-static";
 import http from "http";
-import {existsAsync, hookNames, Hooks, matchPattern, Prefix$IsAny, reqSetPath, RLS} from "./utils";
+import {existsAsync, matchPattern, Prefix$IsAny, reqSetPath, RLS} from "./utils";
 import AwaitLock from "await-lock";
 import Dict = NodeJS.Dict;
 
@@ -326,8 +328,8 @@ export class DynamicRouter {
         const config = this._getDirConfig(filename)
         const relaPath = path.relative(this.config.webroot, filename)
         if (this.handlers[filename]) {
-            this._invokeHookFn(filename, "onDestroy")
             delete this.handlers[filename]
+            await this._invokeHookFn(filename, "onDestroy", this) // onDestroy调用不管其中是否抛出异常，都要往下执行，因此无视返回值
             verb = "Removed"
         }
         if (!config.load_on_demand && shouldReload) {
@@ -416,6 +418,12 @@ export class DynamicRouter {
             if (hook) existedHooks[hookName] = hook
         }
 
+        const e = await this._invokeHookFn(filename, "onCreate", this)
+        if (e) {
+            this.logger.error(`Failed to load ${relaPath}: hook onCreate failed:`, e)
+            throw e
+        }
+
         this.handlers[filename] = {handler, ...existedHooks}
         const hooks = _.keys(existedHooks)
         if (verbose) {
@@ -424,13 +432,14 @@ export class DynamicRouter {
         return {hooks}
     }
 
-    private _invokeHookFn(filename: string, hookName: string, ...args) {
+    private async _invokeHookFn(filename: string, hookName: string, ...args): Promise<Error> {
         if (typeof this.handlers[filename]?.[hookName] === "function") {
             try {
-                this.handlers[filename][hookName].apply(this.handlers[filename].handler, args)
+                await this.handlers[filename][hookName].apply(this.handlers[filename].handler, args)
                 this.logger.info(`${hookName} Hook invoked for ${filename}`)
             } catch (e) {
                 this.logger.warn(`Error encountered while invoking ${hookName} Hook for ${filename}:`, e)
+                return e
             }
         }
     }

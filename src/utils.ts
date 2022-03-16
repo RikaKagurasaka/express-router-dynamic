@@ -33,12 +33,6 @@ export function reqSetPath(req: Request, path: string): void {
     req.url = urlObj.toString()
 }
 
-export interface Hooks {
-    onDestroy?: () => void
-}
-
-export const hookNames = ["onDestroy"]
-
 /**
  * Remove Leading Slash
  */
