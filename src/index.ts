@@ -74,11 +74,11 @@ export class DynamicRouter {
      */
     async getHandler(relativePath: string, shouldLoad = true): Promise<undefined | any> {
         const filename = this.getAbsFilename(relativePath)
-        let result = this.handlers[filename].handler
-        if (result) return result
+        let result = this.handlers[filename]?.handler
+        if (result || !shouldLoad) return result
         const config = this._getDirConfig(filename)
         const existed = await this._tryLoadHandler(filename, config)
-        if (existed) return this.handlers[filename].handler
+        if (existed) return this.handlers[filename]?.handler
         else return undefined
     }
 
@@ -94,7 +94,7 @@ export class DynamicRouter {
      * @return undefined | any 若存在，返回当前在该路径上的handler对象；否则，返回undefined
      */
     getHandlerSync(relativePath: string): undefined | any {
-        return this.handlers[this.getAbsFilename(relativePath)].handler
+        return this.handlers[this.getAbsFilename(relativePath)]?.handler
     }
 
     private _initialized = false
@@ -132,10 +132,15 @@ export class DynamicRouter {
             this.extra_watchers.push(watcher)
         }
 
-        if (this.config.reload_on_SIGUSR2) process.on("SIGUSR2", () => {
+        if (this.config.reload_on_SIGUSR2) process.on("SIGUSR2", async () => {
             if (this.config.reload_on_SIGUSR2) {
                 this.logger.warn("Received SIGUSR2")
-                this._fullReload();
+                await this.lock.acquireAsync()
+                try {
+                    await this._fullReload();
+                } finally {
+                    this.lock.release()
+                }
             }
         })
 
@@ -422,7 +427,7 @@ export class DynamicRouter {
     private _invokeHookFn(filename: string, hookName: string, ...args) {
         if (typeof this.handlers[filename]?.[hookName] === "function") {
             try {
-                this.handlers[filename]?.[hookName].apply(this, args)
+                this.handlers[filename][hookName].apply(this.handlers[filename].handler, args)
                 this.logger.info(`${hookName} Hook invoked for ${filename}`)
             } catch (e) {
                 this.logger.warn(`Error encountered while invoking ${hookName} Hook for ${filename}:`, e)
