@@ -305,9 +305,11 @@ export class DynamicRouter {
             if (queue.length > 0) {
                 if (!this.config.force_full_reload) { // 只更新队列中的
                     this.shouldClearCache = true
+                    const promises = []
                     for (const [k, b] of queue) {
-                        await this._updateHandler(k, b)
+                        promises.push(this._updateHandler(k, b))
                     }
+                    await Promise.all(promises)
                 } else { // 移除现在所有的
                     await this._fullReload(_.fromPairs(queue))
                 }
@@ -364,9 +366,11 @@ export class DynamicRouter {
     private async _fullReload(extraQueue: Dict<boolean> = {}) {
         this.shouldClearCache = true
         const toUpdates = new Set(_.keys(extraQueue).concat(_.keys(this.handlers)))
+        const promises = []
         for (const k of toUpdates) {
-            await this._updateHandler(k, extraQueue[k] !== false, false)
+            promises.push(this._updateHandler(k, extraQueue[k] !== false, false))
         }
+        await Promise.all(promises)
         this.logger.info(`All Handlers Removed or Reloaded!`)
     }
 
