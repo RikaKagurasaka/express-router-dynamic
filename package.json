@@ -1,6 +1,6 @@
 {
   "name": "express-router-dynamic",
-  "version": "2.1.0-rc3",
+  "version": "2.1.0",
   "description": "Express Router which loads js codes dynamically as well as serves static files, and routes based on directory structure.",
   "main": "bld/index.js",
   "type": "commonjs",
