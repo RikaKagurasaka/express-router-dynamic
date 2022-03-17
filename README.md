@@ -1,5 +1,5 @@
 [![NPM Package](https://badge.fury.io/js/express-router-dynamic.svg)](https://www.npmjs.com/package/express-router-dynamic)
-[![Build Status](https://travis-ci.org/RikaSugisawa/express-router-dynamic.svg)](https://travis-ci.org/RikaSugisawa/express-router-dynamic)
+[![Build Status](https://github.com/RikaKagurasaka/express-router-dynamic/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/RikaKagurasaka/express-router-dynamic/actions/workflows/build.yml)
 
 # express-router-dynamic
 Express Router which loads js codes dynamically as well as serves static files, and routes based on directory structure.
