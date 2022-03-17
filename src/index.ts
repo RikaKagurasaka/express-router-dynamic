@@ -79,9 +79,7 @@ export class DynamicRouter {
         let result = this.handlers[filename]?.handler
         if (result || !shouldLoad) return result
         const config = this._getDirConfig(filename)
-        const existed = await this._tryLoadHandler(filename, config)
-        if (existed) return this.handlers[filename]?.handler
-        else return undefined
+        return await this._tryLoadHandler(filename, config)
     }
 
     /**
@@ -214,15 +212,15 @@ export class DynamicRouter {
         const filename = this.getAbsFilename(path_)
         if (this._canExec(filename, config)) {
             if (path_.endsWith("/")) return false
-            const existed = await this._tryLoadHandler(filename, config)
-            if (!existed) return false
+            const handler = await this._tryLoadHandler(filename, config)
+            if (!handler) return false
             reqSetPath(req, rela)
             // @ts-ignore
             req.$router = this;
             // @ts-ignore
             res.$router = this;
             try {
-                await this.handlers[filename].handler.call(this, req, res, next)
+                await handler.call(this, req, res, next)
                 return true
             } catch (e) {
                 if (config.handler_error_log_level) this.logger[config.handler_error_log_level](`Error in handler ${filename}:`, e)
@@ -237,22 +235,23 @@ export class DynamicRouter {
         }
     }
 
-    private async _tryLoadHandler(filename: string, config: DirectoryConfig): Promise<boolean> {
+    private async _tryLoadHandler(filename: string, config: DirectoryConfig): Promise<RequestHandler | undefined> {
         if (!this.handlers[filename]) {
             // 先检查文件存不存在，不存在就记录下来，存在就加入缓存
-            if (this.nofile_cache.has(filename)) return false
+            if (this.nofile_cache.has(filename)) return
             if (!(await existsAsync(filename))) {
                 this.nofile_cache.add(filename)
-                return false
+                return
             }
             await this.lock.acquireAsync()
             try {
-                await this._loadHandler(filename, config)
+                if (!this.handlers[filename]) await this._loadHandler(filename, config)
+                return this.handlers[filename]?.handler
             } finally {
                 this.lock.release()
             }
         }
-        return true
+        return this.handlers[filename]?.handler
     }
 
     private _canExec(filename: string, config: DirectoryConfig): boolean {
