@@ -502,7 +502,46 @@ describe('File Watching', function () {
             expect(data).property("test2").equal("/esm")
         });
     })
-})
+});
+
+describe('Hook', function () {
+    this.timeout(5000)
+    let app, server, axios, tempDir, port, router
+
+    before(async () => {
+        ({app, server, axios, tempDir, port} = await createApp())
+        await fscp("./test/testRoute/core", path.join(tempDir, "route"), {recursive: true})
+        router = new DynamicRouter({webroot: path.join(tempDir, "route")})
+        app.use(router)
+    })
+
+    after(async () => {
+        await router.onDestroy()
+        await destroyApp(server, tempDir)
+    })
+
+    it('should call onDestroy', async function () {
+        // first load the handler
+        const {data} = await axios.get("/hook-test")
+        expect(data).property("test").equal("/hook-test")
+
+        delete global["onDestroy_hook_called"]
+        expect(global["onDestroy_hook_called"]).be.undefined
+        // write the file to destroy the handler
+        await fsp.appendFile(path.join(tempDir, "route", "hook-test.route.js"), `
+// something of no use`)
+        await delay(2000) // wait until onDestroy hook called
+        expect(global["onDestroy_hook_called"]).equal("/hook-test")
+    });
+
+    it('should call onCreate', async function () {
+        delete global["onCreate_hook_called"]
+        expect(global["onCreate_hook_called"]).be.undefined
+        const {data} = await axios.get("/hook-test")
+        expect(data).property("test").equal("/hook-test")
+        expect(global["onCreate_hook_called"]).equal("/hook-test")
+    });
+});
 
 describe('Security', function () {
     let app, server, axios, tempDir, port, router
@@ -546,7 +585,7 @@ describe('Security', function () {
         ({status} = await axios.get("../dynamicB", {validateStatus: () => true}));
         expect(status).equal(404)
     });
-})
+});
 
 describe('ESModule Support', function () {
     this.timeout(5000)
@@ -614,4 +653,4 @@ describe('ESModule Support', function () {
             expect(data).property("test").equal("/async-esm")
         });
     })
-})
+});

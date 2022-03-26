@@ -24,10 +24,12 @@ export interface DynamicRouter extends Function, RequestHandler, Prefix$IsAny {
 
 }
 
+type HandlerObj = { handler: RequestHandler } & Hooks
+
 export class DynamicRouter {
     config: Config
     dirConfigs: Dict<DirectoryConfig> = {}
-    handlers: Dict<{ handler: RequestHandler } & Hooks> = {}
+    handlers: Dict<HandlerObj> = {}
     nofile_cache: Set<string> = new Set()
     watcher: FSWatcher
     extra_watchers: FSWatcher[] = []
@@ -329,8 +331,9 @@ export class DynamicRouter {
         const config = this._getDirConfig(filename)
         const relaPath = path.relative(this.config.webroot, filename)
         if (this.handlers[filename]) {
+            const handler = this.handlers[filename]
             delete this.handlers[filename]
-            await this._invokeHookFn(filename, "onDestroy", this) // onDestroy调用不管其中是否抛出异常，都要往下执行，因此无视返回值
+            await this._invokeHookFn(handler, filename, "onDestroy", this) // onDestroy调用不管其中是否抛出异常，都要往下执行，因此无视返回值
             verb = "Removed"
         }
         if (!config.load_on_demand && shouldReload) {
@@ -421,13 +424,14 @@ export class DynamicRouter {
             if (hook) existedHooks[hookName] = hook
         }
 
-        const e = await this._invokeHookFn(filename, "onCreate", this)
+        const handlerObj = {handler, ...existedHooks}
+        const e = await this._invokeHookFn(handlerObj, filename, "onCreate", this)
         if (e) {
             this.logger.error(`Failed to load ${relaPath}: hook onCreate failed:`, e)
             throw e
         }
 
-        this.handlers[filename] = {handler, ...existedHooks}
+        this.handlers[filename] = handlerObj
         const hooks = _.keys(existedHooks)
         if (verbose) {
             this.logger.info(`Loaded handler ${relaPath}${hooks.length ? `, loaded hooks: ${hooks.join(",")}` : ""}`)
@@ -435,10 +439,10 @@ export class DynamicRouter {
         return {hooks}
     }
 
-    private async _invokeHookFn(filename: string, hookName: string, ...args): Promise<Error> {
-        if (typeof this.handlers[filename]?.[hookName] === "function") {
+    private async _invokeHookFn(handler: HandlerObj, filename: string, hookName: string, ...args): Promise<Error> {
+        if (typeof handler?.[hookName] === "function") {
             try {
-                await this.handlers[filename][hookName].apply(this.handlers[filename].handler, args)
+                await handler[hookName].apply(handler.handler, args)
                 this.logger.info(`${hookName} Hook invoked for ${filename}`)
             } catch (e) {
                 this.logger.warn(`Error encountered while invoking ${hookName} Hook for ${filename}:`, e)
