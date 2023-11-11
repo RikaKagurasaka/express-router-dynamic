@@ -31,7 +31,7 @@
     "@types/mocha": "^9.1.0",
     "@types/node": "^16.11.26",
     "@types/url-parse": "^1.4.8",
-    "axios": "^0.26.0",
+    "axios": "^1.6.0",
     "chai": "^4.3.6",
     "delay": "^5.0.0",
     "express": "^4.17.3",
